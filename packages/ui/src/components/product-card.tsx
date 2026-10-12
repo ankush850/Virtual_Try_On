@@ -2,9 +2,9 @@
 
 import Link from 'next/link';
 import type { ProductListItemDto } from '@vj/types';
-import { Badge } from './badge';
-import { Card, CardContent, CardFooter } from './card';
-import { formatPrice, cn } from '../lib/utils';
+import { Badge } from './badge.js';
+import { Card, CardContent, CardFooter } from './card.js';
+import { formatPrice, cn } from '../lib/utils.js';
 
 export function ProductCard({ product, className }: { product: ProductListItemDto; className?: string }) {
   const imageUrl = product.primaryImage?.url;

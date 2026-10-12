@@ -8,6 +8,7 @@ export interface TryOnAssetSummary {
   defaultScale: number;
   defaultRotationZ: number;
   mirrorForOppositeEar: boolean;
+  fingerIndex?: number | null;
 }
 
 export interface TryOnSessionDto {

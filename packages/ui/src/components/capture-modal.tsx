@@ -2,10 +2,10 @@
 
 import * as React from 'react';
 import { Download, Bookmark, Share2, RefreshCw, Sparkles, Check } from 'lucide-react';
-import { Button } from './button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from './dialog';
-import { ImagePreview } from './image-preview';
-import { toast } from './sonner';
+import { Button } from './button.js';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from './dialog.js';
+import { ImagePreview } from './image-preview.js';
+import { toast } from './sonner.js';
 
 export interface CaptureModalProps {
   open: boolean;

@@ -3,8 +3,8 @@ import type { CategoryDto, ProductDetailDto, ProductListItemDto } from '@vj/type
 import type { AdminSettingItem, PublicSettingsDto } from '@vj/types';
 import type { CaptureDto, CaptureDownloadDto, TryOnSessionDto } from '@vj/types';
 import type { JewelleryKind, ProductStatus, TryOnSessionStatus } from '@vj/shared';
-import type { ApiClient } from './client';
-import type { ProductListFilters } from './query-keys';
+import type { ApiClient } from './client.js';
+import type { ProductListFilters } from './query-keys.js';
 
 export interface Paginated<T> {
   items: T[];
@@ -55,15 +55,59 @@ export function createCatalogApi(client: ApiClient) {
   };
 }
 
+export interface TryOnAnalyticsEvent {
+  type: string;
+  value?: string | number;
+  meta?: Record<string, unknown>;
+}
+
+export interface TryOnProductAsset {
+  productId: string;
+  jewelleryKind: JewelleryKind;
+  asset: {
+    id: string;
+    assetType: string;
+    url: string;
+    anchorProfile: Record<string, unknown>;
+    defaultScale: number;
+    defaultRotationZ: number;
+    mirrorForOppositeEar: boolean;
+    fingerIndex: number | null;
+  };
+}
+
+export interface CaptureUploadTicket {
+  uploadUrl: string;
+  storageKey: string;
+  headers: Record<string, string>;
+  expiresIn: number;
+}
+
 export function createTryOnApi(client: ApiClient) {
   return {
     startSession: (body: { productId: string; clientInfo?: Record<string, unknown> }) =>
       client.post<TryOnSessionDto>('/try-on/sessions', body),
     patchSession: (
       sessionId: string,
-      body: { status?: TryOnSessionStatus; metrics?: Record<string, unknown> },
+      body: {
+        status?: TryOnSessionStatus;
+        metrics?: Record<string, unknown>;
+        events?: TryOnAnalyticsEvent[];
+      },
     ) => client.patch<TryOnSessionDto>(`/try-on/sessions/${sessionId}`, body),
+    heartbeat: (sessionId: string) =>
+      client.post<{ ok: boolean; status: TryOnSessionStatus }>(`/try-on/sessions/${sessionId}/heartbeat`),
+    recordEvents: (sessionId: string, events: TryOnAnalyticsEvent[]) =>
+      client.post<void>(`/try-on/sessions/${sessionId}/events/batch`, { events }),
+    getProductAsset: (productId: string) =>
+      client.get<TryOnProductAsset | null>(`/try-on/products/${productId}/asset`),
+    getProductAssets: (productIds: string[]) =>
+      client.post<TryOnProductAsset[]>('/try-on/products/assets', { productIds }),
     getSession: (sessionId: string) => client.get<TryOnSessionDto>(`/try-on/sessions/${sessionId}`),
+    requestUploadUrl: (
+      sessionId: string,
+      body: { mimeType: string; fileSize: number },
+    ) => client.post<CaptureUploadTicket>(`/try-on/sessions/${sessionId}/upload-url`, body),
     registerCapture: (
       sessionId: string,
       body: {

@@ -77,7 +77,14 @@ export class LocalStorageAdapter implements StoragePort {
     return `${this.publicBaseUrl}?key=${encodeURIComponent(key)}`;
   }
 
-  async writeObject(key: string, body: NodeJS.ReadableStream | Buffer): Promise<void> {
+  async readObject(key: string): Promise<Buffer | null> {
+    const path = this.resolve(key);
+    if (!existsSync(path)) return null;
+    const { readFileSync } = await import('fs');
+    return readFileSync(path);
+  }
+
+  async writeObject(key: string, body: NodeJS.ReadableStream | Buffer, _mimeType?: string): Promise<void> {
     const path = this.resolve(key);
     mkdirSync(dirname(path), { recursive: true });
     if (Buffer.isBuffer(body)) {

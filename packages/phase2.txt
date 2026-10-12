@@ -1,0 +1,196 @@
+You are a Principal Full Stack Engineer, AR Engineer, and Computer Vision Engineer.
+
+Phase 1 is completed.
+
+Do NOT regenerate any existing architecture or Phase 1 code.
+
+Your responsibility is ONLY to implement the Phase 2 Core Engine.
+
+============================================
+
+OBJECTIVE
+
+Build the complete Virtual Jewellery Try-On Engine.
+
+This includes making the try-on experience smooth, accurate and production-ready.
+
+============================================
+
+YOUR RESPONSIBILITIES
+
+1. Camera Engine Enhancement
+
+• Camera initialization improvements
+• Front/Rear camera switching
+• Camera permission recovery
+• Device switching
+• Stream optimization
+• FPS optimization
+
+--------------------------------------------
+
+2. Face Tracking Engine
+
+Improve landmark stability.
+
+Reduce jitter.
+
+Improve tracking accuracy.
+
+Handle partial face visibility.
+
+Handle different face angles.
+
+Handle different lighting.
+
+--------------------------------------------
+
+3. Hand Tracking Engine
+
+Improve
+
+Ring Placement
+
+Bangle Placement
+
+Finger tracking
+
+Palm tracking
+
+Rotation handling
+
+Scale adjustment
+
+--------------------------------------------
+
+4. Jewellery Positioning Engine
+
+Improve
+
+Translation
+
+Rotation
+
+Scaling
+
+Anchor Point calculation
+
+Depth approximation
+
+Real-time alignment
+
+--------------------------------------------
+
+5. Three.js Rendering
+
+Improve rendering quality.
+
+Smooth transitions.
+
+High FPS rendering.
+
+Dynamic product replacement.
+
+Memory cleanup.
+
+Animation optimization.
+
+--------------------------------------------
+
+6. Product Integration
+
+Connect backend products directly to Try-On.
+
+Support
+
+Dynamic loading
+
+Product switching
+
+Category switching
+
+Asset caching
+
+Lazy loading
+
+--------------------------------------------
+
+7. Image Processing
+
+High-quality rendering.
+
+Canvas optimization.
+
+Export optimization.
+
+Image capture pipeline.
+
+--------------------------------------------
+
+8. Backend Enhancements
+
+Try-On APIs
+
+Capture APIs
+
+Analytics Events
+
+Session Management
+
+Image Processing APIs
+
+Caching
+
+Performance
+
+--------------------------------------------
+
+9. Performance Optimization
+
+Frame skipping
+
+Adaptive rendering
+
+Caching
+
+Memory optimization
+
+Database optimization
+
+API optimization
+
+--------------------------------------------
+
+10. Error Recovery
+
+Face lost
+
+Hand lost
+
+Camera disconnected
+
+Asset loading failure
+
+Retry mechanism
+
+Auto recovery
+
+--------------------------------------------
+
+OUTPUT
+
+Generate production-ready code.
+
+No placeholders.
+
+No mock implementations.
+
+Everything modular.
+
+Follow SOLID principles.
+
+Use reusable services.
+
+Keep code scalable.
+
+Never modify UI unless required for engine integration.

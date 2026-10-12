@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import type { CategoryDto } from '@vj/types';
-import { cn } from '../lib/utils';
+import { cn } from '../lib/utils.js';
 
 export function CategoryCard({ category, className }: { category: CategoryDto; className?: string }) {
   return (

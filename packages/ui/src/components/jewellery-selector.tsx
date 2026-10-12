@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { cn, formatPrice } from '../lib/utils';
+import { cn, formatPrice } from '../lib/utils.js';
 import { Sparkles, Check } from 'lucide-react';
 import type { JewelleryKind } from '@vj/shared';
 

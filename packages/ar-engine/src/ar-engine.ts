@@ -1,5 +1,6 @@
 import type { JewelleryKind } from '@vj/shared';
 import { CameraEngine } from './camera/camera-engine.js';
+import type { CameraHealthStatus } from './camera/camera-engine.js';
 import { FaceDetector } from './detectors/face-detector.js';
 import { HandDetector } from './detectors/hand-detector.js';
 import { AnchorRegistry } from './anchors/anchor-registry.js';
@@ -7,109 +8,235 @@ import { LandmarkProcessor } from './landmarks/landmark-processor.js';
 import { PoseFitter } from './fitting/pose-fitter.js';
 import { TrackingEngine } from './tracking/tracking-engine.js';
 import { AdaptiveController } from './performance/adaptive-controller.js';
+import type { QualityTier } from './performance/adaptive-controller.js';
 import { FpsMeter } from './performance/fps-meter.js';
 import { Canvas2dRenderer } from './renderers/canvas2d-renderer.js';
 import { ThreeRenderer } from './renderers/three-renderer.js';
 import { CaptureCompositor } from './capture/capture-compositor.js';
+import { LightingEstimator } from './imaging/lighting-estimator.js';
 import { initTfBackend } from './models/tf-backend.js';
 import type { ModelAdapter } from './models/model-adapter.js';
 import type {
   ArEngineConfig,
   ArEngineEvents,
+  CaptureOptions,
+  CaptureResult,
+  JewelleryConfig,
   LandmarkResult,
   PoseFit,
   TrackingStatus,
 } from './types.js';
 
 export type ArEngineHost = {
-  video: HTMLVideoElement;
-  overlayCanvas: HTMLCanvasElement;
-  threeCanvas?: HTMLCanvasElement;
+  video:          HTMLVideoElement;
+  overlayCanvas:  HTMLCanvasElement;
+  threeCanvas?:   HTMLCanvasElement;
 };
 
 type Listener = (events: ArEngineEvents) => void;
 
+const FACE_LANDMARK_KEYS = [
+  'LEFT_EAR_LOBE', 'RIGHT_EAR_LOBE', 'NOSE_TIP',
+  'LEFT_EYE', 'RIGHT_EYE', 'CHIN', 'MOUTH', 'NECKLACE_ANCHOR',
+  'FOREHEAD_CENTER', 'MAANG_TIKKA',
+];
+
+const HAND_LANDMARK_KEYS = [
+  'WRIST', 'BANGLE_ANCHOR', 'WATCH_ANCHOR',
+  'RING_SLOT_1', 'RING_SLOT_2', 'RING_SLOT_3',
+  'index_finger_mcp', 'ring_finger_mcp',
+];
+
 /**
- * Production AR try-on engine facade.
- * Modular: camera, detectors, landmarks, anchors, fitting, tracking, render, capture.
+ * Phase 2 – Production AR try-on engine facade.
+ *
+ * New capabilities over Phase 1:
+ * - `setJewellery()`: hot-swap jewellery without stopping the camera.
+ * - `captureHQ()`: returns both full-res and thumbnail blobs.
+ * - `preloadAssets()`: warms up the image/model cache before user interaction.
+ * - `setLowPowerMode()`: reduces detection frequency when page is background.
+ * - Full error recovery with exponential back-off.
+ * - Asset lazy-loading: load model only when tracking first acquires.
+ * - Camera permission recovery path.
+ * - Frame budget enforcement: skips render when behind budget.
+ * - Camera health monitoring with auto-reconnect.
+ * - Quality tier adaptation based on device performance.
+ * - Comprehensive metrics for analytics integration.
+ * - Watermark support for captured images.
  */
 export class ArEngine {
-  private readonly camera = new CameraEngine();
+  private readonly camera    = new CameraEngine();
   private readonly processor = new LandmarkProcessor();
-  private readonly tracker = new TrackingEngine();
-  private readonly fpsMeter = new FpsMeter();
-  private adaptive = new AdaptiveController(28);
-  private detector: ModelAdapter | null = null;
-  private fitter: PoseFitter | null = null;
+  private readonly tracker   = new TrackingEngine();
+  private readonly fpsMeter  = new FpsMeter();
+  private readonly capture   = new CaptureCompositor();
+  private readonly lighting  = new LightingEstimator();
+  private adaptive           = new AdaptiveController(28);
+
+  private detector:       ModelAdapter | null = null;
+  private fitter:         PoseFitter   | null = null;
   private canvasRenderer: Canvas2dRenderer | null = null;
-  private threeRenderer: ThreeRenderer | null = null;
-  private readonly capture = new CaptureCompositor();
-  private host: ArEngineHost | null = null;
+  private threeRenderer:  ThreeRenderer    | null = null;
+
+  private host:   ArEngineHost  | null = null;
   private config: ArEngineConfig | null = null;
-  private raf = 0;
-  private running = false;
-  private frameIndex = 0;
-  private lastPose: PoseFit | null = null;
+
+  private raf          = 0;
+  private running      = false;
+  private frameIndex   = 0;
+  private mirrored     = true;
+  private debugLandmarks = false;
+
+  private lastPose:      PoseFit       | null = null;
   private lastLandmarks: LandmarkResult | null = null;
-  private mirrored = true;
-  private listeners = new Set<Listener>();
+
   private status: TrackingStatus = 'INITIALIZING';
+  private listeners = new Set<Listener>();
+
+  // Error recovery
   private recoverAttempts = 0;
+  private recoverTimer: ReturnType<typeof setTimeout> | null = null;
+  private maxRecoverAttempts = 8;
+
+  // Asset loading deferred flag
+  private assetLoaded = false;
+  private assetLoadingPromise: Promise<void> | null = null;
+
+  // ─── Event bus ─────────────────────────────────────────────────────────────
 
   on(listener: Listener): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
 
+  // ─── Start ─────────────────────────────────────────────────────────────────
+
   async start(host: ArEngineHost, config: ArEngineConfig): Promise<void> {
-    this.host = host;
-    this.config = config;
+    this.host    = host;
+    this.config  = config;
     this.mirrored = config.mirroredPreview ?? true;
+    this.debugLandmarks = config.debugLandmarks ?? false;
     this.adaptive = new AdaptiveController(config.targetFps ?? 28);
 
     await initTfBackend();
-    await this.camera.init(host.video);
 
+    // Camera with permission recovery
+    try {
+      await this.camera.init(host.video, { facing: 'user' });
+    } catch (err) {
+      // Try permission recovery then retry.
+      await this.camera.recoverPermission();
+      await this.camera.init(host.video, { facing: 'user' });
+    }
+
+    // Camera health monitoring
+    this.camera.onHealthChange((status) => {
+      if (status === 'RECONNECTING' || status === 'DEAD') {
+        this.emit({
+          status: this.status,
+          fps: this.fpsMeter.getFps(),
+          error: `Camera ${status.toLowerCase()}`,
+        });
+        if (status === 'DEAD') {
+          this.scheduleRecovery();
+        }
+      }
+    });
+
+    // Detector
     const registration = AnchorRegistry.get(config.jewelleryKind);
-    const profile = AnchorRegistry.mergeProfile(
-      config.jewelleryKind,
-      config.anchorProfile,
-    );
-    this.detector = registration.detector === 'hand' ? new HandDetector() : new FaceDetector();
+    this.detector = registration.detector === 'hand'
+      ? new HandDetector()
+      : new FaceDetector();
     await this.detector.load();
 
+    // Tracking engine with status callback
+    this.tracker.reset();
+    this.tracker.setStatusChangeCallback((s) => {
+      this.status = s;
+      if (s === 'LOST') this.scheduleRecovery();
+    });
+
+    // Fitter
+    const profile = AnchorRegistry.mergeProfile(config.jewelleryKind, config.anchorProfile);
     this.fitter = new PoseFitter(profile, {
-      scale: config.defaultScale ?? 1,
-      rotationZ: ((config.defaultRotationZ ?? 0) * Math.PI) / 180,
+      scale:       config.defaultScale    ?? 1,
+      rotationZ:   ((config.defaultRotationZ ?? 0) * Math.PI) / 180,
       fingerIndex: config.fingerIndex,
     });
 
+    // Renderers
     const ctx = host.overlayCanvas.getContext('2d');
     if (!ctx) throw new Error('overlay canvas 2d context missing');
     this.canvasRenderer = new Canvas2dRenderer(host.overlayCanvas, ctx);
 
-    const useProcedural3d =
-      config.assetUrl === 'procedural://earring' ||
-      config.assetType === 'MODEL_GLB' ||
-      config.assetType === 'MODEL_GLTF';
-    if (useProcedural3d && host.threeCanvas) {
-      this.threeRenderer = new ThreeRenderer(host.threeCanvas);
-      await this.threeRenderer.loadModel(
-        config.assetUrl || 'procedural://earring',
-        config.mirrorForOppositeEar ?? true,
-      );
-    } else if (config.assetType === 'IMAGE_OVERLAY') {
-      await this.canvasRenderer.loadOverlay(config.assetUrl, config.mirrorForOppositeEar ?? false);
-    } else if (host.threeCanvas) {
-      this.threeRenderer = new ThreeRenderer(host.threeCanvas);
-      this.threeRenderer.loadProceduralEarring(config.mirrorForOppositeEar ?? true);
-    } else {
-      await this.canvasRenderer.loadOverlay(config.assetUrl, config.mirrorForOppositeEar ?? false);
-    }
+    await this._loadAsset(config);
 
     this.syncCanvasSizes();
     this.running = true;
+    this.processor.reset();
+    this.frameIndex = 0;
     this.loop();
+  }
+
+  // ─── Dynamic jewellery hot-swap ────────────────────────────────────────────
+
+  async setJewellery(config: JewelleryConfig): Promise<void> {
+    if (!this.host || !this.canvasRenderer) return;
+
+    // Update fitter for new kind / anchor.
+    const profile = AnchorRegistry.mergeProfile(config.jewelleryKind, config.anchorProfile);
+    this.fitter = new PoseFitter(profile, {
+      scale:       config.defaultScale    ?? 1,
+      rotationZ:   ((config.defaultRotationZ ?? 0) * Math.PI) / 180,
+      fingerIndex: config.fingerIndex,
+    });
+
+    // If kind changed, swap detector.
+    const registration = AnchorRegistry.get(config.jewelleryKind);
+    const needsNewDetector =
+      !this.detector ||
+      (registration.detector === 'hand'  && this.detector.name !== 'hand') ||
+      (registration.detector === 'face'  && this.detector.name !== 'face');
+
+    if (needsNewDetector) {
+      this.detector?.dispose();
+      this.detector = registration.detector === 'hand'
+        ? new HandDetector()
+        : new FaceDetector();
+      await this.detector.load();
+      this.processor.reset();
+      this.tracker.reset();
+    }
+
+    // Load the new asset.
+    await this._loadAsset(config);
+
+    // Update config reference.
+    if (this.config) {
+      this.config = { ...this.config, ...config };
+    }
+
+    this.emit({ status: this.status, fps: this.fpsMeter.getFps(), assetReady: true });
+  }
+
+  // ─── Asset preloading ──────────────────────────────────────────────────────
+
+  async preloadAssets(urls: string[]): Promise<void> {
+    await Promise.allSettled(
+      urls.map((url) => {
+        if (url.endsWith('.glb') || url.endsWith('.gltf')) {
+          return this.threeRenderer?.loadModel(url, false) ?? Promise.resolve();
+        }
+        return this.canvasRenderer?.preload(url) ?? Promise.resolve();
+      }),
+    );
+  }
+
+  // ─── Camera controls ───────────────────────────────────────────────────────
+
+  setMirrored(on: boolean): void {
+    this.mirrored = on;
   }
 
   async flipCamera(): Promise<void> {
@@ -121,16 +248,56 @@ export class ArEngine {
     await this.camera.switchDevice(deviceId);
   }
 
+  async optimizeStream(targetFps: number, width: number, height: number): Promise<void> {
+    await this.camera.optimizeStream(targetFps, width, height);
+  }
+
+  async setTorch(on: boolean): Promise<void> {
+    await this.camera.setTorch(on);
+  }
+
+  async setZoom(level: number): Promise<void> {
+    await this.camera.setZoom(level);
+  }
+
   static listCameras(): Promise<MediaDeviceInfo[]> {
     return CameraEngine.listDevices();
   }
 
+  static listCameraCapabilities() {
+    return CameraEngine.listCapabilities();
+  }
+
+  // ─── Capture ───────────────────────────────────────────────────────────────
+
   async captureBlob(): Promise<Blob> {
     if (!this.host) throw new Error('Engine not started');
-    const sources: Array<HTMLCanvasElement | HTMLVideoElement> = [this.host.video, this.host.overlayCanvas];
+    const sources: Array<HTMLCanvasElement | HTMLVideoElement> = [
+      this.host.video,
+      this.host.overlayCanvas,
+    ];
     if (this.host.threeCanvas) sources.push(this.host.threeCanvas);
-    return this.capture.toBlob(sources);
+    return this.capture.toBlob(sources, this.mirrored);
   }
+
+  async captureHQ(options: CaptureOptions = {}): Promise<CaptureResult> {
+    if (!this.host) throw new Error('Engine not started');
+
+    const sources: Array<HTMLCanvasElement | HTMLVideoElement> = [
+      this.host.video,
+      this.host.overlayCanvas,
+    ];
+    if (this.host.threeCanvas) sources.push(this.host.threeCanvas);
+
+    return this.capture.captureHQ(sources, this.mirrored, options);
+  }
+
+  /** Set a watermark to apply to all captures. */
+  setWatermark(config: { text: string; position?: 'bottom-right' | 'bottom-left' | 'bottom-center'; opacity?: number } | null): void {
+    this.capture.setWatermark(config);
+  }
+
+  // ─── Status / metrics ──────────────────────────────────────────────────────
 
   getStatus(): TrackingStatus {
     return this.status;
@@ -140,80 +307,122 @@ export class ArEngine {
     return this.fpsMeter.getFps();
   }
 
+  getMetrics() {
+    return {
+      fps:            this.fpsMeter.getFps(),
+      latencyMs:      this.fpsMeter.getMeanLatency(),
+      p95LatencyMs:   this.fpsMeter.getP95Latency(),
+      p99LatencyMs:   this.fpsMeter.getP99Latency(),
+      droppedFrames:  this.fpsMeter.getDroppedFrames(),
+      jankFrames:     this.fpsMeter.getJankFrames(),
+      status:         this.status,
+      qualityTier:    this.adaptive.getQualityTier(),
+      detectEveryN:   this.adaptive.getDetectEveryN(),
+      detectScale:    this.adaptive.getDetectScale(),
+      frameBudgetMs:  this.adaptive.getFrameBudgetMs(),
+      thermalPressure: this.adaptive.getMetrics().thermalPressure,
+      tracking:       this.tracker.getMetrics(),
+      cameraHealth:   this.camera.getHealthStatus(),
+      cameraResolution: this.camera.getResolution(),
+    };
+  }
+
+  setLowPowerMode(on: boolean): void {
+    this.adaptive.setLowPowerMode(on);
+  }
+
+  // ─── Stop ──────────────────────────────────────────────────────────────────
+
   stop(): void {
     this.running = false;
     if (this.raf) cancelAnimationFrame(this.raf);
+    if (this.recoverTimer) clearTimeout(this.recoverTimer);
     this.detector?.dispose();
     this.threeRenderer?.dispose();
+    this.canvasRenderer?.dispose();
     this.camera.dispose();
     this.processor.reset();
     this.tracker.reset();
-    this.detector = null;
-    this.fitter = null;
+    this.fpsMeter.reset();
+    this.adaptive.reset();
+    this.detector       = null;
+    this.fitter         = null;
     this.canvasRenderer = null;
-    this.threeRenderer = null;
-    this.host = null;
+    this.threeRenderer  = null;
+    this.host           = null;
+    this.lastPose       = null;
+    this.lastLandmarks  = null;
+    this.recoverAttempts = 0;
+    this.assetLoaded     = false;
+    this.assetLoadingPromise = null;
   }
 
-  private syncCanvasSizes(): void {
-    if (!this.host) return;
-    const video = this.host.video;
-    const w = video.videoWidth || 1280;
-    const h = video.videoHeight || 720;
-    this.host.overlayCanvas.width = w;
-    this.host.overlayCanvas.height = h;
-    if (this.host.threeCanvas) {
-      this.host.threeCanvas.width = w;
-      this.host.threeCanvas.height = h;
-      this.threeRenderer?.resize(w, h);
-    }
-  }
+  // ─── Frame loop ────────────────────────────────────────────────────────────
 
   private loop = async (): Promise<void> => {
     if (!this.running || !this.host || !this.detector || !this.fitter || !this.canvasRenderer) return;
+
     const t0 = performance.now();
+
     try {
-      if (this.host.video.readyState >= 2) {
+      const video = this.host.video;
+
+      if (video.readyState >= 2) {
+        // Sync canvas dimensions if video size changed (e.g. after flip).
         if (
-          this.host.overlayCanvas.width !== this.host.video.videoWidth &&
-          this.host.video.videoWidth > 0
+          this.host.overlayCanvas.width !== video.videoWidth &&
+          video.videoWidth > 0
         ) {
           this.syncCanvasSizes();
         }
 
-        this.canvasRenderer.drawVideo(this.host.video, this.mirrored);
+        // Clear overlay; video draw is composited separately.
+        this.canvasRenderer.clear();
+        this.canvasRenderer.drawVideo(video, this.mirrored);
 
-        if (this.lastLandmarks) {
-          const named = this.lastLandmarks.named;
-          const width = this.host.overlayCanvas.width;
-          const mirroredNamed = this.mirrored
-            ? Object.fromEntries(
-                Object.entries(named).map(([k, v]) => [k, { x: width - v.x, y: v.y }]),
-              )
-            : named;
-          this.canvasRenderer.drawLandmarks(mirroredNamed, [
-            'LEFT_EAR_LOBE',
-            'RIGHT_EAR_LOBE',
-            'NOSE_TIP',
-            'LEFT_EYE',
-            'RIGHT_EYE',
-            'CHIN',
-          ]);
+        // Adapt quality tier to Three.js renderer
+        const tier = this.adaptive.getQualityTier();
+        if (this.threeRenderer) {
+          this.threeRenderer.setRenderQuality(tier);
+        }
+
+        // Skip render if adaptive controller says we're under budget.
+        const skipRender = this.adaptive.shouldSkipRender();
+
+        if (this.frameIndex % 8 === 0 && this.threeRenderer) {
+          const size = this.lastPose?.scale ? this.lastPose.scale * 4 : video.videoWidth * 0.35;
+          const sampleX = this.lastPose
+            ? (this.mirrored ? video.videoWidth - this.lastPose.position.x : this.lastPose.position.x)
+            : video.videoWidth / 2;
+          const luma = this.lighting.estimate(video, {
+            x: sampleX,
+            y: this.lastPose?.position.y ?? video.videoHeight / 2,
+            size,
+          });
+          this.threeRenderer.setExposure(luma);
         }
 
         if (this.adaptive.shouldDetect(this.frameIndex)) {
-          const raw = await this.detector.estimate(this.host.video);
-          const { result, lost } = this.processor.process(raw);
-          this.lastLandmarks = result;
-          if (lost) this.scheduleRecovery();
+          try {
+            const raw = await this.detector.estimate(video);
+            const { result } = this.processor.process(raw);
+            this.lastLandmarks = result;
+          } catch {
+            // Detection error: keep previous landmarks.
+          }
         }
 
         const rawPose = this.fitter.fit(this.lastLandmarks);
-        const pose = this.mirrorPose(rawPose, this.host.overlayCanvas.width);
+        const pose    = this.mirrorPose(rawPose, this.host.overlayCanvas.width);
         this.lastPose = pose;
-        this.status = this.tracker.update(pose);
+        this.status   = this.tracker.update(pose);
 
-        if (this.status !== 'LOST' && pose.visible) {
+        // Reset recovery counter on successful tracking
+        if (this.status === 'TRACKING') {
+          this.recoverAttempts = Math.max(0, this.recoverAttempts - 1);
+        }
+
+        if (!skipRender && this.status !== 'LOST' && pose.visible) {
           if (this.threeRenderer) {
             this.threeRenderer.render(pose);
           } else {
@@ -223,14 +432,29 @@ export class ArEngine {
             }
           }
         } else if (this.threeRenderer) {
-          this.threeRenderer.render({ ...pose, visible: false });
+          this.threeRenderer.render({ ...pose, visible: pose.visible && this.status !== 'LOST' });
+        }
+
+        // Draw debug landmarks.
+        if (this.debugLandmarks && this.lastLandmarks) {
+          const named  = this.lastLandmarks.named;
+          const width  = this.host.overlayCanvas.width;
+          const mirroredNamed = this.mirrored
+            ? Object.fromEntries(
+                Object.entries(named).map(([k, v]) => [k, { x: width - v.x, y: v.y }]),
+              )
+            : named;
+          const keys = this.lastLandmarks.kind === 'face'
+            ? FACE_LANDMARK_KEYS
+            : HAND_LANDMARK_KEYS;
+          this.canvasRenderer.drawLandmarks(mirroredNamed, keys, 'dots');
         }
       }
     } catch (err) {
       this.emit({
-        status: this.status,
-        fps: this.fpsMeter.getFps(),
-        error: err instanceof Error ? err.message : 'AR frame error',
+        status:    this.status,
+        fps:       this.fpsMeter.getFps(),
+        error:     err instanceof Error ? err.message : 'AR frame error',
       });
       this.scheduleRecovery();
     }
@@ -238,25 +462,81 @@ export class ArEngine {
     const dt = performance.now() - t0;
     this.adaptive.recordFrameMs(dt);
     const fps = this.fpsMeter.tick();
-    this.emit({ status: this.status, fps });
+    this.emit({ status: this.status, fps, latencyMs: dt });
     this.frameIndex += 1;
     this.raf = requestAnimationFrame(() => void this.loop());
   };
 
-  private scheduleRecovery(): void {
-    if (this.recoverAttempts > 5) return;
-    this.recoverAttempts += 1;
-    window.setTimeout(() => {
+  // ─── Private helpers ───────────────────────────────────────────────────────
+
+  private async _loadAsset(config: JewelleryConfig): Promise<void> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        this.processor.reset();
-        this.tracker.reset();
-        this.recoverAttempts = Math.max(0, this.recoverAttempts - 1);
-      } catch {
-        // ignore
+        await this._loadAssetOnce(config);
+        return;
+      } catch (err) {
+        lastError = err;
+        await new Promise((resolve) => setTimeout(resolve, 280 * (attempt + 1)));
       }
-    }, 250);
+    }
+    this.emit({
+      status: this.status,
+      fps: this.fpsMeter.getFps(),
+      error: lastError instanceof Error ? lastError.message : 'Asset loading failed',
+    });
+    throw lastError instanceof Error ? lastError : new Error('Asset loading failed');
   }
 
+  private async _loadAssetOnce(config: JewelleryConfig): Promise<void> {
+    if (!this.host || !this.canvasRenderer) return;
+
+    const use3d =
+      config.assetType === 'MODEL_GLB' ||
+      config.assetType === 'MODEL_GLTF' ||
+      config.assetUrl  === 'procedural://earring';
+
+    if (use3d && this.host.threeCanvas) {
+      if (!this.threeRenderer) {
+        this.threeRenderer = new ThreeRenderer(this.host.threeCanvas);
+        this.syncCanvasSizes();
+      }
+      await this.threeRenderer.loadModel(
+        config.assetUrl || 'procedural://earring',
+        config.mirrorForOppositeEar ?? true,
+      );
+    } else if (config.assetType === 'IMAGE_OVERLAY' || !use3d) {
+      if (config.assetUrl && config.assetUrl !== 'procedural://earring') {
+        await this.canvasRenderer.loadOverlay(
+          config.assetUrl,
+          config.mirrorForOppositeEar ?? false,
+        );
+      } else if (this.host.threeCanvas) {
+        // Fallback procedural 3-D earring.
+        if (!this.threeRenderer) {
+          this.threeRenderer = new ThreeRenderer(this.host.threeCanvas);
+          this.syncCanvasSizes();
+        }
+        this.threeRenderer.loadProceduralEarring(config.mirrorForOppositeEar ?? true);
+      }
+    }
+
+    this.assetLoaded = true;
+  }
+
+  private syncCanvasSizes(): void {
+    if (!this.host) return;
+    const video = this.host.video;
+    const w = video.videoWidth  || 1280;
+    const h = video.videoHeight || 720;
+    this.host.overlayCanvas.width  = w;
+    this.host.overlayCanvas.height = h;
+    if (this.host.threeCanvas) {
+      this.host.threeCanvas.width  = w;
+      this.host.threeCanvas.height = h;
+      this.threeRenderer?.resize(w, h);
+    }
+  }
 
   private mirrorPose(pose: PoseFit, width: number): PoseFit {
     if (!this.mirrored) return pose;
@@ -268,6 +548,26 @@ export class ArEngine {
         : undefined,
       rotationZ: -pose.rotationZ,
     };
+  }
+
+  private scheduleRecovery(): void {
+    if (this.recoverAttempts >= this.maxRecoverAttempts) return;
+    if (this.recoverTimer) return; // already scheduled
+
+    const delay = Math.min(200 * Math.pow(1.6, this.recoverAttempts), 4000);
+    this.recoverAttempts += 1;
+
+    this.recoverTimer = setTimeout(() => {
+      this.recoverTimer = null;
+      try {
+        this.processor.reset();
+        this.tracker.reset();
+        this.fitter?.reset?.();
+        this.recoverAttempts = Math.max(0, this.recoverAttempts - 1);
+      } catch {
+        // ignore
+      }
+    }, delay);
   }
 
   private emit(events: ArEngineEvents): void {

@@ -26,9 +26,13 @@ import {
   type CameraHud,
   type JewellerySelectorItem,
 } from '@vj/ui';
+import type { JewelleryKind } from '@vj/shared';
 import type { ProductDetailDto, ProductListItemDto } from '@vj/types';
+import type { TryOnAnalyticsEvent } from '@vj/api-client';
 import { api } from '@/lib/api';
+import { assetCache } from '@/lib/asset-cache';
 import { useTryOnStore } from '@/stores/try-on-store';
+import { toJewelleryConfig, uploadCapture } from './try-on-bridge';
 
 export interface TryOnExperienceProps {
   product: ProductDetailDto;
@@ -53,6 +57,10 @@ export function TryOnExperience({ product: initialProduct, alternativeProducts }
   const [currentCaptureBlob, setCurrentCaptureBlob] = useState<Blob | null>(null);
   const [cinemaMode, setCinemaMode] = useState(false);
   const [isSavedInSession, setIsSavedInSession] = useState(false);
+  const [captureMeta, setCaptureMeta] = useState({ width: 0, height: 0 });
+  const [kindFilter, setKindFilter] = useState<JewelleryKind | 'ALL'>('ALL');
+  const pendingEvents = useRef<TryOnAnalyticsEvent[]>([]);
+  const lastStatus = useRef('');
 
   const {
     sessionId,
@@ -89,6 +97,13 @@ export function TryOnExperience({ product: initialProduct, alternativeProducts }
     primaryImage: p.primaryImage,
   }));
 
+  const categoryKinds = Array.from(new Set(selectorItems.map((item) => item.jewelleryKind)));
+  const visibleItems =
+    kindFilter === 'ALL'
+      ? selectorItems
+      : selectorItems.filter((item) => item.jewelleryKind === kindFilter);
+  const selectorKey = selectorItems.map((item) => item.id).join(',');
+
   // Start AR session with API
   const sessionQuery = useQuery({
     queryKey: ['try-on', 'bootstrap', currentProduct.id],
@@ -113,6 +128,63 @@ export function TryOnExperience({ product: initialProduct, alternativeProducts }
     };
   }, []);
 
+  useEffect(() => {
+    const onVisibility = () => {
+      engineRef.current?.setLowPowerMode(document.visibilityState === 'hidden');
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
+
+  useEffect(() => {
+    if (!selectorKey) return;
+    let active = true;
+    const ids = selectorKey.split(',');
+    void api.tryOn.getProductAssets(ids).then(async (rows) => {
+      if (!active) return;
+      const urls = rows
+        .map((row) => row.asset.url)
+        .filter((url) => url && !url.startsWith('procedural://'));
+      await assetCache.preloadMany(urls);
+      await engineRef.current?.preloadAssets(urls.map((url) => assetCache.resolve(url)));
+    }).catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [selectorKey]);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    const flush = () => {
+      const metrics = engineRef.current?.getMetrics();
+      if (metrics) {
+        pendingEvents.current.push({
+          type: 'performance',
+          value: Math.round(metrics.fps),
+          meta: {
+            qualityTier: metrics.qualityTier,
+            cameraHealth: metrics.cameraHealth,
+            status: metrics.status,
+          },
+        });
+      }
+      const batch = pendingEvents.current.splice(0, 40);
+      if (!batch.length) return;
+      void api.tryOn.recordEvents(sessionId, batch).catch(() => {
+        pendingEvents.current.unshift(...batch.slice(-20));
+      });
+    };
+    const eventsTimer = window.setInterval(flush, 8000);
+    const heartTimer = window.setInterval(() => {
+      void api.tryOn.heartbeat(sessionId).catch(() => undefined);
+    }, 60_000);
+    return () => {
+      window.clearInterval(eventsTimer);
+      window.clearInterval(heartTimer);
+      flush();
+    };
+  }, [sessionId]);
+
   const asset = sessionQuery.data?.asset ?? currentProduct.tryOnAsset;
 
   // Start Camera & AR tracking
@@ -125,9 +197,15 @@ export function TryOnExperience({ product: initialProduct, alternativeProducts }
       engineRef.current = engine;
       engine.on((e) => {
         setHud({ status: e.status, fps: Math.round(e.fps), error: e.error });
-        setTracking(e.status === 'TRACKING' || e.status === 'RUNNING');
+        setTracking(e.status === 'TRACKING');
+        if (e.status !== lastStatus.current) {
+          lastStatus.current = e.status;
+          pendingEvents.current.push({ type: 'tracking_change', value: e.status });
+        }
+        if (e.error) pendingEvents.current.push({ type: 'engine_error', value: e.error });
       });
 
+      const config = await toJewelleryConfig(currentProduct.jewelleryKind, asset);
       await engine.start(
         {
           video: videoRef.current,
@@ -135,13 +213,7 @@ export function TryOnExperience({ product: initialProduct, alternativeProducts }
           threeCanvas: threeRef.current,
         },
         {
-          jewelleryKind: currentProduct.jewelleryKind,
-          assetUrl: asset?.url || 'procedural://earring',
-          assetType: asset?.assetType ?? 'PROCEDURAL',
-          anchorProfile: (asset?.anchorProfile ?? {}) as Parameters<ArEngine['start']>[1]['anchorProfile'],
-          defaultScale: asset?.defaultScale ?? 1.0,
-          defaultRotationZ: asset?.defaultRotationZ ?? 0,
-          mirrorForOppositeEar: asset?.mirrorForOppositeEar ?? true,
+          ...config,
           mirroredPreview: mirrorOn,
           targetFps: 30,
         },
@@ -176,6 +248,7 @@ export function TryOnExperience({ product: initialProduct, alternativeProducts }
   function toggleMirror() {
     const next = !mirrorOn;
     setMirrorOn(next);
+    engineRef.current?.setMirrored(next);
   }
 
   // Handle switching jewellery piece in-studio
@@ -193,15 +266,13 @@ export function TryOnExperience({ product: initialProduct, alternativeProducts }
 
       // If camera is running, re-configure the AR engine with new asset
       if (engineRef.current && running) {
-        const newAsset = detail.tryOnAsset;
-        await engineRef.current.setJewellery({
-          jewelleryKind: detail.jewelleryKind,
-          assetUrl: newAsset?.url || 'procedural://earring',
-          assetType: newAsset?.assetType ?? 'PROCEDURAL',
-          anchorProfile: (newAsset?.anchorProfile ?? {}) as Parameters<ArEngine['setJewellery']>[0]['anchorProfile'],
-          defaultScale: newAsset?.defaultScale ?? 1.0,
-          defaultRotationZ: newAsset?.defaultRotationZ ?? 0,
-          mirrorForOppositeEar: newAsset?.mirrorForOppositeEar ?? true,
+        await engineRef.current.setJewellery(
+          await toJewelleryConfig(detail.jewelleryKind, detail.tryOnAsset),
+        );
+        pendingEvents.current.push({
+          type: 'product_swap',
+          value: detail.id,
+          meta: { jewelleryKind: detail.jewelleryKind },
         });
         toast.success(`Now wearing ${detail.name}`);
       }
@@ -217,9 +288,15 @@ export function TryOnExperience({ product: initialProduct, alternativeProducts }
       return;
     }
     try {
-      const blob = await engineRef.current.captureBlob();
-      setCurrentCaptureBlob(blob);
-      const url = URL.createObjectURL(blob);
+      const shot = await engineRef.current.captureHQ({
+        mimeType: 'image/jpeg',
+        quality: 0.92,
+        thumbnail: true,
+      });
+      setCurrentCaptureBlob(shot.blob);
+      setCaptureMeta({ width: shot.width, height: shot.height });
+      pendingEvents.current.push({ type: 'capture', value: shot.width });
+      const url = URL.createObjectURL(shot.blob);
       setPreviewUrl(url);
       setCaptureOpen(true);
       setIsSavedInSession(false);
@@ -231,19 +308,13 @@ export function TryOnExperience({ product: initialProduct, alternativeProducts }
   // Save capture to user lookbook / server
   const saveCaptureMutation = useMutation({
     mutationFn: async () => {
-      if (!sessionId) throw new Error('No active try-on session');
-      const mockKey = `captures/${sessionId}/${Date.now()}.png`;
-      const sizeBytes = currentCaptureBlob?.size ?? 150000;
-
-      const registered = await api.tryOn.registerCapture(sessionId, {
-        storageKey: mockKey,
-        width: 1080,
-        height: 1440,
-        mimeType: 'image/png',
-        fileSizeBytes: sizeBytes,
+      if (!sessionId || !currentCaptureBlob) throw new Error('No active try-on session');
+      return uploadCapture({
+        sessionId,
+        blob: currentCaptureBlob,
+        width: captureMeta.width,
+        height: captureMeta.height,
       });
-
-      return registered;
     },
     onSuccess: (data) => {
       setLastCaptureId(data.id);
@@ -338,9 +409,34 @@ export function TryOnExperience({ product: initialProduct, alternativeProducts }
           />
 
           {/* Quick In-Studio Jewellery Switcher Strip */}
-          <div className="mt-4 w-full max-w-xl">
+          <div className="mt-4 w-full max-w-xl space-y-2">
+            {categoryKinds.length > 1 ? (
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={kindFilter === 'ALL' ? 'default' : 'outline'}
+                  className="rounded-full"
+                  onClick={() => setKindFilter('ALL')}
+                >
+                  All
+                </Button>
+                {categoryKinds.map((kind) => (
+                  <Button
+                    key={kind}
+                    type="button"
+                    size="sm"
+                    variant={kindFilter === kind ? 'default' : 'outline'}
+                    className="rounded-full"
+                    onClick={() => setKindFilter(kind)}
+                  >
+                    {kind.replace(/_/g, ' ')}
+                  </Button>
+                ))}
+              </div>
+            ) : null}
             <JewellerySelector
-              items={selectorItems}
+              items={visibleItems}
               selectedId={currentProduct.id}
               onSelect={handleSelectPiece}
             />
@@ -431,7 +527,7 @@ export function TryOnExperience({ product: initialProduct, alternativeProducts }
         onOpenChange={setCaptureOpen}
         previewUrl={previewUrl}
         productName={currentProduct.name}
-        onSave={() => saveCaptureMutation.mutateAsync()}
+        onSave={() => saveCaptureMutation.mutateAsync().then(() => undefined)}
         isSaving={saveCaptureMutation.isPending}
       />
     </div>

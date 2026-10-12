@@ -1,5 +1,5 @@
-export { ApiError, createApiClient, type ApiClient, type ApiClientOptions } from './client';
-export { queryKeys, type ProductListFilters } from './query-keys';
+export { ApiError, createApiClient, type ApiClient, type ApiClientOptions } from './client.js';
+export { queryKeys, type ProductListFilters } from './query-keys.js';
 export {
   createApiServices,
   createAuthApi,
@@ -7,4 +7,7 @@ export {
   createTryOnApi,
   createAdminApi,
   type Paginated,
-} from './services';
+  type TryOnAnalyticsEvent,
+  type TryOnProductAsset,
+  type CaptureUploadTicket,
+} from './services.js';

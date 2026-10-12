@@ -17,4 +17,6 @@ export interface StoragePort {
   headObject(key: string): Promise<{ exists: boolean; contentLength?: number; contentType?: string }>;
   deleteObject(key: string): Promise<void>;
   publicUrl(key: string): string;
+  readObject(key: string): Promise<Buffer | null>;
+  writeObject(key: string, body: Buffer, mimeType: string): Promise<void>;
 }
