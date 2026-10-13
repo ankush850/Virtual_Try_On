@@ -33,6 +33,9 @@ import { api } from '@/lib/api';
 import { assetCache } from '@/lib/asset-cache';
 import { useTryOnStore } from '@/stores/try-on-store';
 import { toJewelleryConfig, uploadCapture } from './try-on-bridge';
+import { TryOnCategorySwitch } from '@/components/try-on/try-on-category-switch';
+import { TryOnLoadingState } from '@/components/try-on/try-on-loading-state';
+import { TryOnErrorState } from '@/components/try-on/try-on-error-state';
 
 export interface TryOnExperienceProps {
   product: ProductDetailDto;
@@ -325,20 +328,17 @@ export function TryOnExperience({ product: initialProduct, alternativeProducts }
     },
   });
 
-  if (sessionQuery.isLoading) return <PageLoader label="Initializing Luxury AR Studio…" />;
+  if (sessionQuery.isLoading) {
+    return <TryOnLoadingState label="Initializing Luxury AR Studio…" subtext="Calibrating 3D sensors and camera stream" />;
+  }
 
   if (sessionQuery.isError) {
     return (
-      <div className="mx-auto max-w-lg rounded-3xl border border-destructive/30 bg-destructive/5 p-8 text-center shadow-lg">
-        <Sparkles className="mx-auto h-8 w-8 text-destructive/70" />
-        <h3 className="mt-4 font-serif text-xl font-semibold">Studio Connection Issue</h3>
-        <p className="mt-2 text-sm text-muted-foreground">
-          We could not initiate your virtual fitting session. Please check your network connection.
-        </p>
-        <Button className="mt-6 rounded-full" onClick={() => sessionQuery.refetch()}>
-          Retry Studio Connection
-        </Button>
-      </div>
+      <TryOnErrorState
+        title="Studio Connection Issue"
+        description="We could not initiate your virtual fitting session. Please check your network connection."
+        onRetry={() => sessionQuery.refetch()}
+      />
     );
   }
 
@@ -410,31 +410,11 @@ export function TryOnExperience({ product: initialProduct, alternativeProducts }
 
           {/* Quick In-Studio Jewellery Switcher Strip */}
           <div className="mt-4 w-full max-w-xl space-y-2">
-            {categoryKinds.length > 1 ? (
-              <div className="flex gap-2 overflow-x-auto pb-1">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={kindFilter === 'ALL' ? 'default' : 'outline'}
-                  className="rounded-full"
-                  onClick={() => setKindFilter('ALL')}
-                >
-                  All
-                </Button>
-                {categoryKinds.map((kind) => (
-                  <Button
-                    key={kind}
-                    type="button"
-                    size="sm"
-                    variant={kindFilter === kind ? 'default' : 'outline'}
-                    className="rounded-full"
-                    onClick={() => setKindFilter(kind)}
-                  >
-                    {kind.replace(/_/g, ' ')}
-                  </Button>
-                ))}
-              </div>
-            ) : null}
+            <TryOnCategorySwitch
+              categories={categoryKinds}
+              selectedCategory={kindFilter}
+              onSelectCategory={setKindFilter}
+            />
             <JewellerySelector
               items={visibleItems}
               selectedId={currentProduct.id}
