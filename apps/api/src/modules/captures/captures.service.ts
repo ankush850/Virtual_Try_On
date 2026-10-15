@@ -106,6 +106,9 @@ export class CapturesService {
     if (!session) {
       throw new AppException(ErrorCode.SESSION_NOT_FOUND, 'Session not found', HttpStatus.NOT_FOUND);
     }
+    if (session.userId && userId && session.userId !== userId) {
+      throw new AppException(ErrorCode.FORBIDDEN, 'Not your session', HttpStatus.FORBIDDEN);
+    }
 
     const maxBytes = this.config.get<number>('captures.maxFileSizeBytes') ?? 15 * 1024 * 1024;
     if (input.fileSize > maxBytes) {

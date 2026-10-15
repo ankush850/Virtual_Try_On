@@ -1,4 +1,6 @@
 import { inflateSync, deflateSync } from 'zlib';
+// jpeg-js ships as CommonJS. This compiles to require().
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 import jpeg = require('../../vendor/jpeg-js/index.js');
 
 export type InspectedImage = {

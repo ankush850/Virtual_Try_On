@@ -1,196 +1,156 @@
-You are a Principal Full Stack Engineer, AR Engineer, and Computer Vision Engineer.
 
-Phase 1 is completed.
-
-Do NOT regenerate any existing architecture or Phase 1 code.
-
-Your responsibility is ONLY to implement the Phase 2 Core Engine.
-
-============================================
-
-OBJECTIVE
-
-Build the complete Virtual Jewellery Try-On Engine.
-
-This includes making the try-on experience smooth, accurate and production-ready.
-
-============================================
-
-YOUR RESPONSIBILITIES
-
-1. Camera Engine Enhancement
-
-• Camera initialization improvements
-• Front/Rear camera switching
-• Camera permission recovery
-• Device switching
-• Stream optimization
-• FPS optimization
-
---------------------------------------------
-
-2. Face Tracking Engine
-
-Improve landmark stability.
-
-Reduce jitter.
-
-Improve tracking accuracy.
-
-Handle partial face visibility.
-
-Handle different face angles.
-
-Handle different lighting.
-
---------------------------------------------
-
-3. Hand Tracking Engine
-
-Improve
-
-Ring Placement
-
-Bangle Placement
-
-Finger tracking
-
-Palm tracking
-
-Rotation handling
-
-Scale adjustment
-
---------------------------------------------
-
-4. Jewellery Positioning Engine
-
-Improve
-
-Translation
-
-Rotation
-
-Scaling
-
-Anchor Point calculation
-
-Depth approximation
-
-Real-time alignment
-
---------------------------------------------
-
-5. Three.js Rendering
-
-Improve rendering quality.
-
-Smooth transitions.
-
-High FPS rendering.
-
-Dynamic product replacement.
-
-Memory cleanup.
-
-Animation optimization.
-
---------------------------------------------
-
-6. Product Integration
-
-Connect backend products directly to Try-On.
-
-Support
-
-Dynamic loading
-
-Product switching
-
-Category switching
-
-Asset caching
-
-Lazy loading
-
---------------------------------------------
-
-7. Image Processing
-
-High-quality rendering.
-
-Canvas optimization.
-
-Export optimization.
-
-Image capture pipeline.
-
---------------------------------------------
-
-8. Backend Enhancements
-
-Try-On APIs
-
-Capture APIs
-
-Analytics Events
-
-Session Management
-
-Image Processing APIs
-
-Caching
-
-Performance
-
---------------------------------------------
-
-9. Performance Optimization
-
-Frame skipping
-
-Adaptive rendering
-
-Caching
-
-Memory optimization
-
-Database optimization
-
-API optimization
-
---------------------------------------------
-
-10. Error Recovery
-
-Face lost
-
-Hand lost
-
-Camera disconnected
-
-Asset loading failure
-
-Retry mechanism
-
-Auto recovery
-
---------------------------------------------
-
-OUTPUT
-
-Generate production-ready code.
-
-No placeholders.
-
-No mock implementations.
-
-Everything modular.
-
-Follow SOLID principles.
-
-Use reusable services.
-
-Keep code scalable.
-
-Never modify UI unless required for engine integration.
+Context:
+Phase 1 and Phase 2 development are complete.
+
+Do NOT redesign the architecture.
+Do NOT regenerate existing code.
+Do NOT create new features unless required to fix integration.
+Do NOT explain concepts.
+Output only required code changes and a concise checklist.
+
+Objective:
+Verify the complete integration of Phase 1 and Phase 2 and ensure the application is production-ready.
+
+CHECKLIST
+1. Verify project builds successfully.
+2. Check all imports and dependencies.
+3. Fix broken references.
+4. Remove duplicate code.
+5. Verify folder structure consistency.
+6. Ensure lint passes.
+7. Ensure TypeScript has zero errors.
+
+BACKEND
+
+Verify:
+- Authentication
+- Authorization (RBAC)
+- JWT
+- Prisma schema
+- Database migrations
+- Product APIs
+- Category APIs
+- Upload APIs
+- Asset APIs
+- Try-On APIs
+- Error handling
+- Validation
+- Logging
+- Caching
+- Environment variables
+
+Fix only broken integrations.
+
+FRONTEND
+
+Verify:
+- Authentication flow
+- Protected routes
+- Product catalogue
+- Search
+- Filters
+- Product details
+- Camera screen
+- Try-On page
+- Admin pages
+- Upload pages
+- Responsive layout
+- API integration
+- Zustand store
+- TanStack Query
+- Loading states
+- Error states
+- Toasts
+- Skeletons
+
+Fix only integration issues.
+
+AR ENGINE
+Verify:
+- Camera initialization
+- Camera permissions
+- Face detection
+- Hand detection
+- Jewellery positioning
+- Scaling
+- Rotation
+- Tracking stability
+- Product switching
+- Three.js rendering
+- Memory cleanup
+
+Fix only issues affecting functionality.
+
+ADMIN
+
+Verify:
+- Login
+- Dashboard
+- Product CRUD
+- Category CRUD
+- Asset upload
+- Settings
+- API connectivity
+
+DATABASE
+
+Verify:
+- Prisma schema
+- Relationships
+- Indexes
+- UUID usage
+- Soft delete
+- Seed data (if applicable)
+
+PERFORMANCE
+
+Check:
+- Unnecessary re-renders
+- Large components
+- Duplicate API calls
+- Memory leaks
+- Bundle size
+- Lazy loading
+- Image optimization
+
+Optimize only where necessary.
+
+FINAL VALIDATION
+
+Verify complete user flow:
+
+Admin Login
+→ Create Category
+→ Create Product
+→ Upload Jewellery Asset
+→ Product appears in catalogue
+→ Open Try-On
+→ Camera opens
+→ Face/Hand detected
+→ Jewellery overlays correctly
+→ Product switching works
+→ Capture works (if implemented)
+→ No console errors
+→ No API errors
+
+
+OUTPUT FORMAT
+
+Return only:
+
+1. Integration issues found
+2. Required fixes
+3. Files to modify
+4. Final project health:
+   - Build: PASS/FAIL
+   - Backend: PASS/FAIL
+   - Frontend: PASS/FAIL
+   - AR Engine: PASS/FAIL
+   - Database: PASS/FAIL
+   - Admin: PASS/FAIL
+   - Overall: READY / NOT READY
+
+Do not regenerate working code.
+Do not explain architecture.
+Do not rewrite existing modules.
+Modify only what is required for successful integration.

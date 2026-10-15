@@ -7,9 +7,12 @@ const nextConfig: NextConfig = {
     remotePatterns: [{ protocol: 'https', hostname: '**' }, { protocol: 'http', hostname: 'localhost' }],
   },
   webpack: (config) => {
+    config.resolve.extensionAlias = {
+      ...config.resolve.extensionAlias,
+      '.js': ['.ts', '.tsx', '.js'],
+    };
     config.resolve.alias = {
       ...config.resolve.alias,
-      // Prefer browser builds for TF.js
     };
     config.experiments = {
       ...config.experiments,

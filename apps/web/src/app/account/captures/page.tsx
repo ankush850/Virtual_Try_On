@@ -129,7 +129,7 @@ export default function CapturesPage() {
                 </div>
                 <div className="absolute top-3 left-3">
                   <Badge className="bg-black/60 backdrop-blur-md text-white border border-white/20 text-[10px]">
-                    {new Date(c.createdAt).toLocaleDateString()}
+                    {c.createdAt ? new Date(c.createdAt).toLocaleDateString() : '—'}
                   </Badge>
                 </div>
               </div>
