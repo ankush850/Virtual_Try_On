@@ -6,28 +6,19 @@ import { JewelleryKind, ProductStatus } from '@vj/shared';
 import {
   Plus,
   Search,
-  Gem,
-  MoreVertical,
-  CheckCircle,
   Eye,
   Trash2,
   Edit,
-  Sparkles,
+  Upload,
 } from 'lucide-react';
-import {
-  AdminShell,
-} from '@/components/layout/admin-shell';
+import { AdminShell } from '@/components/layout/admin-shell';
 import {
   Button,
   Card,
   CardContent,
   CardDescription,
-  CardHeader,
-  CardTitle,
   Badge,
   Input,
-  Label,
-  Textarea,
   Select,
   SelectContent,
   SelectItem,
@@ -50,27 +41,20 @@ import {
   toast,
 } from '@vj/ui';
 import { api } from '@/lib/api';
-import type { ProductDetailDto, CategoryDto } from '@vj/types';
+import type { ProductListItemDto } from '@vj/types';
+import { ProductFormDialog } from '@/components/products/product-form-dialog';
+import { UploadJewelleryImageDialog } from '@/components/products/upload-jewellery-image-dialog';
 
 export default function AdminProductsPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [selectedKind, setSelectedKind] = useState<string>('all');
-  const [createOpen, setCreateOpen] = useState(false);
-  const [editProduct, setEditProduct] = useState<ProductDetailDto | null>(null);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<ProductListItemDto | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
-  // Form State for New Product
-  const [name, setName] = useState('');
-  const [sku, setSku] = useState('');
-  const [slug, setSlug] = useState('');
-  const [description, setDescription] = useState('');
-  const [categoryId, setCategoryId] = useState('');
-  const [kind, setKind] = useState<JewelleryKind>(JewelleryKind.EARRINGS);
-  const [priceCents, setPriceCents] = useState('7500000');
-  const [currency, setCurrency] = useState('INR');
-
-  // Load products
+  // Load products list
   const productsQuery = useQuery({
     queryKey: ['admin', 'products', 'list', search, selectedKind],
     queryFn: () =>
@@ -87,38 +71,11 @@ export default function AdminProductsPage() {
     queryFn: () => api.catalog.listCategories({ flat: true }),
   });
 
-  // Create Product Mutation
-  const createMutation = useMutation({
-    mutationFn: async () => {
-      if (!categoryId) throw new Error('Please select a category');
-      return api.admin.createProduct({
-        categoryId,
-        sku: sku.trim() || `SKU-${Date.now().toString().slice(-6)}`,
-        name: name.trim(),
-        slug: slug.trim() || name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-        description: description.trim() || undefined,
-        jewelleryKind: kind,
-        status: ProductStatus.PUBLISHED,
-        priceCents: parseInt(priceCents, 10) || 0,
-        currency,
-      });
-    },
-    onSuccess: () => {
-      toast.success('Piece created and published in showroom');
-      setCreateOpen(false);
-      resetForm();
-      void queryClient.invalidateQueries({ queryKey: ['admin', 'products'] });
-    },
-    onError: (err) => {
-      toast.error(err instanceof Error ? err.message : 'Could not create product');
-    },
-  });
-
   // Publish Product Mutation
   const publishMutation = useMutation({
     mutationFn: (id: string) => api.admin.publishProduct(id),
     onSuccess: () => {
-      toast.success('Piece published');
+      toast.success('Piece published in showroom');
       void queryClient.invalidateQueries({ queryKey: ['admin', 'products'] });
     },
     onError: () => toast.error('Could not publish piece'),
@@ -135,33 +92,47 @@ export default function AdminProductsPage() {
     onError: () => toast.error('Could not delete piece'),
   });
 
-  function resetForm() {
-    setName('');
-    setSku('');
-    setSlug('');
-    setDescription('');
-    setCategoryId('');
-    setKind(JewelleryKind.EARRINGS);
-    setPriceCents('7500000');
-  }
+  const handleEdit = (product: ProductListItemDto) => {
+    setSelectedProduct(product);
+    setIsFormOpen(true);
+  };
+
+  const handleCreate = () => {
+    setSelectedProduct(null);
+    setIsFormOpen(true);
+  };
+
+  const handleUploadImage = (product?: ProductListItemDto) => {
+    setSelectedProduct(product ?? null);
+    setIsUploadOpen(true);
+  };
 
   const items = productsQuery.data?.items ?? [];
 
   return (
     <AdminShell title="Product Catalogue Management">
       <div className="space-y-6">
-        {/* Top Header & New Button */}
+        {/* Top Header & Actions */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="font-serif text-3xl font-light text-foreground">Fine Jewellery Inventory</h1>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Manage pieces, virtual try-on assets, pricing, and showcase status.
+              Manage pieces, pricing, 3D try-on readiness, and showcase images.
             </p>
           </div>
 
-          <Button onClick={() => setCreateOpen(true)} className="rounded-full gap-2 shadow-sm self-start sm:self-auto">
-            <Plus className="h-4 w-4" /> Add New Piece
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => handleUploadImage()}
+              className="rounded-full gap-2 text-xs"
+            >
+              <Upload className="h-3.5 w-3.5" /> Upload Image
+            </Button>
+            <Button onClick={handleCreate} className="rounded-full gap-2 shadow-sm text-xs">
+              <Plus className="h-4 w-4" /> Add Piece
+            </Button>
+          </div>
         </div>
 
         {/* Filter & Search Bar */}
@@ -172,7 +143,7 @@ export default function AdminProductsPage() {
               placeholder="Search by name, SKU, or gem type…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 rounded-xl border-none bg-muted/40 focus-visible:bg-transparent"
+              className="pl-9 rounded-xl border-none bg-muted/40 focus-visible:bg-transparent text-xs"
             />
           </div>
 
@@ -202,7 +173,7 @@ export default function AdminProductsPage() {
           <CardContent className="p-0">
             {productsQuery.isLoading ? (
               <div className="p-6 space-y-3">
-                {Array.from({ length: 6 }).map((_, i) => (
+                {Array.from({ length: 5 }).map((_, i) => (
                   <Skeleton key={i} className="h-12 w-full rounded-xl" />
                 ))}
               </div>
@@ -211,7 +182,7 @@ export default function AdminProductsPage() {
                 title="No pieces match your query"
                 description="Try refining your search or add a new piece to the collection."
                 action={
-                  <Button onClick={() => setCreateOpen(true)} className="rounded-full">
+                  <Button onClick={handleCreate} className="rounded-full">
                     Create Piece
                   </Button>
                 }
@@ -282,6 +253,26 @@ export default function AdminProductsPage() {
                             </a>
                           </Button>
 
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-full text-muted-foreground hover:text-primary"
+                            onClick={() => handleEdit(p)}
+                            title="Edit Piece"
+                          >
+                            <Edit className="h-3.5 w-3.5" />
+                          </Button>
+
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-full text-muted-foreground hover:text-primary"
+                            onClick={() => handleUploadImage(p)}
+                            title="Upload Piece Image"
+                          >
+                            <Upload className="h-3.5 w-3.5" />
+                          </Button>
+
                           {p.status === ProductStatus.DRAFT && (
                             <Button
                               variant="outline"
@@ -299,6 +290,7 @@ export default function AdminProductsPage() {
                             size="icon"
                             className="h-8 w-8 rounded-full text-muted-foreground hover:text-destructive"
                             onClick={() => setDeleteConfirmId(p.id)}
+                            title="Delete Piece"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
@@ -312,149 +304,21 @@ export default function AdminProductsPage() {
           </CardContent>
         </Card>
 
-        {/* Create Product Dialog */}
-        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-          <DialogContent className="max-w-xl rounded-3xl p-6 border border-primary/20 bg-card">
-            <DialogHeader>
-              <div className="flex items-center gap-1.5 text-xs uppercase tracking-widest text-primary font-semibold">
-                <Sparkles className="h-3.5 w-3.5" />
-                <span>Atelier Catalogue Entry</span>
-              </div>
-              <DialogTitle className="font-serif text-2xl font-light">Add New Piece</DialogTitle>
-              <CardDescription className="text-xs">
-                Enter details to register this jewellery item in the virtual showroom.
-              </CardDescription>
-            </DialogHeader>
+        {/* Add / Edit Product Form Dialog */}
+        <ProductFormDialog
+          open={isFormOpen}
+          onOpenChange={setIsFormOpen}
+          initialData={selectedProduct}
+          categories={categoriesQuery.data ?? []}
+        />
 
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                createMutation.mutate();
-              }}
-              className="space-y-4 pt-2"
-            >
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="pieceName" className="text-xs uppercase tracking-wider text-muted-foreground">
-                    Piece Name *
-                  </Label>
-                  <Input
-                    id="pieceName"
-                    placeholder="e.g. Royal Emerald Pendant"
-                    required
-                    value={name}
-                    onChange={(e) => {
-                      setName(e.target.value);
-                      if (!slug) setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-'));
-                    }}
-                    className="rounded-xl"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="pieceSku" className="text-xs uppercase tracking-wider text-muted-foreground">
-                    SKU Code *
-                  </Label>
-                  <Input
-                    id="pieceSku"
-                    placeholder="e.g. LUM-EAR-001"
-                    required
-                    value={sku}
-                    onChange={(e) => setSku(e.target.value)}
-                    className="rounded-xl font-mono text-xs"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                    Jewellery Kind *
-                  </Label>
-                  <Select value={kind} onValueChange={(v) => setKind(v as JewelleryKind)}>
-                    <SelectTrigger className="rounded-xl text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.values(JewelleryKind).map((k) => (
-                        <SelectItem key={k} value={k}>
-                          {k.replace(/_/g, ' ')}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                    Collection / Category *
-                  </Label>
-                  <Select value={categoryId} onValueChange={setCategoryId}>
-                    <SelectTrigger className="rounded-xl text-xs">
-                      <SelectValue placeholder="Select Category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categoriesQuery.data?.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="piecePrice" className="text-xs uppercase tracking-wider text-muted-foreground">
-                    Price in Cents (e.g. 8450000 = ₹84,500)
-                  </Label>
-                  <Input
-                    id="piecePrice"
-                    type="number"
-                    value={priceCents}
-                    onChange={(e) => setPriceCents(e.target.value)}
-                    className="rounded-xl font-mono text-xs"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="pieceCurrency" className="text-xs uppercase tracking-wider text-muted-foreground">
-                    Currency
-                  </Label>
-                  <Input
-                    id="pieceCurrency"
-                    value={currency}
-                    onChange={(e) => setCurrency(e.target.value)}
-                    className="rounded-xl font-mono text-xs uppercase"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="pieceDesc" className="text-xs uppercase tracking-wider text-muted-foreground">
-                  Description & Gemstone Specs
-                </Label>
-                <Textarea
-                  id="pieceDesc"
-                  placeholder="18K Yellow Gold with brilliant-cut diamonds, handcrafted by master artisans..."
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="rounded-xl text-xs min-h-[70px]"
-                />
-              </div>
-
-              <DialogFooter className="pt-4">
-                <Button type="button" variant="ghost" onClick={() => setCreateOpen(false)} className="rounded-full">
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={createMutation.isPending} className="rounded-full px-6">
-                  {createMutation.isPending ? 'Publishing…' : 'Save & Publish Piece'}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+        {/* Upload Jewellery Image Dialog */}
+        <UploadJewelleryImageDialog
+          open={isUploadOpen}
+          onOpenChange={setIsUploadOpen}
+          products={items}
+          defaultProductId={selectedProduct?.id}
+        />
 
         {/* Delete Confirmation Dialog */}
         {deleteConfirmId && (

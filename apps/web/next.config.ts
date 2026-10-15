@@ -10,9 +10,11 @@ const nextConfig: NextConfig = {
     config.resolve.extensionAlias = {
       ...config.resolve.extensionAlias,
       '.js': ['.ts', '.tsx', '.js'],
+      '.mjs': ['.mts', '.mjs'],
     };
     config.resolve.alias = {
       ...config.resolve.alias,
+      // Prefer browser builds for TF.js
     };
     config.experiments = {
       ...config.experiments,
