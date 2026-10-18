@@ -25,11 +25,32 @@ export async function cachedAssetUrl(url: string): Promise<string> {
   }
 }
 
+export function getDefaultProceduralUrl(kind: JewelleryKind): string {
+  switch (kind) {
+    case 'EARRINGS':
+      return 'procedural://earring';
+    case 'NECKLACE':
+    case 'PENDANT':
+    case 'MANGALSUTRA':
+      return 'procedural://necklace';
+    case 'NOSE_RING':
+      return 'procedural://nose_ring';
+    case 'RINGS':
+      return 'procedural://ring';
+    case 'BANGLES':
+    case 'BRACELET':
+    case 'WATCH':
+      return 'procedural://bangle';
+    default:
+      return `procedural://${kind.toLowerCase()}`;
+  }
+}
+
 export async function toJewelleryConfig(
   jewelleryKind: JewelleryKind,
   asset: AssetLike,
 ): Promise<JewelleryConfig> {
-  const source = asset?.url || 'procedural://earring';
+  const source = asset?.url || getDefaultProceduralUrl(jewelleryKind);
   return {
     jewelleryKind,
     assetUrl: await cachedAssetUrl(source),
@@ -37,8 +58,8 @@ export async function toJewelleryConfig(
     anchorProfile: (asset?.anchorProfile ?? {}) as JewelleryConfig['anchorProfile'],
     defaultScale: asset?.defaultScale ?? 1,
     defaultRotationZ: asset?.defaultRotationZ ?? 0,
-    mirrorForOppositeEar: asset?.mirrorForOppositeEar ?? true,
-    fingerIndex: asset?.fingerIndex ?? null,
+    mirrorForOppositeEar: asset?.mirrorForOppositeEar ?? (jewelleryKind === 'EARRINGS'),
+    fingerIndex: asset?.fingerIndex ?? (jewelleryKind === 'RINGS' ? 3 : null),
   };
 }
 

@@ -1,4 +1,4 @@
-import { PrismaClient, SettingValueType } from '@prisma/client';
+import { PrismaClient, SettingValueType, JewelleryKind, AssetType } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 const ROLES = [
@@ -88,7 +88,6 @@ async function main() {
     update: { passwordHash, status: 'ACTIVE' },
   });
 
-  // ensure admin has role if user already existed without roles
   await prisma.userRole.upsert({
     where: {
       userId_roleId: { userId: admin.id, roleId: roleByCode['SUPER_ADMIN']! },
@@ -97,105 +96,279 @@ async function main() {
     update: {},
   });
 
-  const earringCategory = await prisma.category.upsert({
-    where: { slug: 'earrings' },
-    create: {
-      name: 'Earrings',
-      slug: 'earrings',
-      description: 'Virtual try-on earrings',
-      sortOrder: 1,
-      isActive: true,
-    },
-    update: { isActive: true },
-  });
+  // Seed Categories
+  const categoriesData = [
+    { slug: 'earrings', name: 'Earrings', description: 'Fine drop, hoop, and stud earrings for virtual try-on', sortOrder: 1 },
+    { slug: 'necklaces', name: 'Necklaces', description: 'Royal chokers and diamond pendants with collarbone alignment', sortOrder: 2 },
+    { slug: 'nose-rings', name: 'Nose Rings', description: 'Precision nostril studs and septum rings', sortOrder: 3 },
+    { slug: 'rings', name: 'Rings', description: 'Solitaire and bridal eternity rings with hand tracking', sortOrder: 4 },
+    { slug: 'bangles', name: 'Bangles & Bracelets', description: 'Traditional kadas and tennis bracelets with wrist alignment', sortOrder: 5 },
+  ];
 
-  // Demo products with overlay assets for the try-on studio
-  const demoProducts = [
+  const categoryMap: Record<string, string> = {};
+  for (const cat of categoriesData) {
+    const created = await prisma.category.upsert({
+      where: { slug: cat.slug },
+      create: { ...cat, isActive: true },
+      update: { name: cat.name, description: cat.description, sortOrder: cat.sortOrder, isActive: true },
+    });
+    categoryMap[cat.slug] = created.id;
+  }
+
+  // Demo products (at least 2 per category, zero rectangular photos)
+  const catalogueItems = [
+    // ── Earrings ────────────────────────────────────────────────────────────
     {
-      sku: 'DEMO-EARRING-001',
-      name: 'Gold Hoop Earrings',
-      slug: 'gold-hoop-earrings',
-      description: 'Classic 22k gold hoop earrings with a polished finish.',
-      jewelleryKind: 'EARRINGS' as const,
+      sku: 'VJ-EAR-001',
+      name: 'Celestial Solitaire Drop Earrings',
+      slug: 'celestial-solitaire-drop-earrings',
+      categorySlug: 'earrings',
+      description: 'Handcrafted 22k yellow gold drop earrings crowned with bezel-set teardrop gems.',
+      jewelleryKind: JewelleryKind.EARRINGS,
       priceCents: 1299900,
       currency: 'INR',
-      overlayUrl: 'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?w=400&h=400&fit=crop',
+      assetType: AssetType.MODEL_GLB,
+      assetUrl: 'procedural://earring',
+      previewUrl: 'http://localhost:3000/assets/earrings-drop.svg',
+      anchorProfile: { anchorType: 'EAR_LOBE', earSide: 'BOTH' },
+      defaultScale: 1.0,
+      defaultRotationZ: 0,
+      mirrorForOppositeEar: true,
+      fingerIndex: null,
     },
     {
-      sku: 'DEMO-EARRING-002',
-      name: 'Diamond Drop Earrings',
-      slug: 'diamond-drop-earrings',
-      description: 'Elegant diamond-studded drop earrings in white gold.',
-      jewelleryKind: 'EARRINGS' as const,
-      priceCents: 2499900,
+      sku: 'VJ-EAR-002',
+      name: 'Heritage Diamond Solitaire Studs',
+      slug: 'heritage-diamond-solitaire-studs',
+      categorySlug: 'earrings',
+      description: 'Classic 4-prong brilliant-cut diamond studs set in polished white gold.',
+      jewelleryKind: JewelleryKind.EARRINGS,
+      priceCents: 899900,
       currency: 'INR',
-      overlayUrl: 'https://images.unsplash.com/photo-1611591437281-460bfbe1220a?w=400&h=400&fit=crop',
+      assetType: AssetType.IMAGE_OVERLAY,
+      assetUrl: 'http://localhost:3000/assets/earrings-stud.svg',
+      previewUrl: 'http://localhost:3000/assets/earrings-stud.svg',
+      anchorProfile: { anchorType: 'EAR_LOBE', earSide: 'BOTH' },
+      defaultScale: 0.8,
+      defaultRotationZ: 0,
+      mirrorForOppositeEar: true,
+      fingerIndex: null,
+    },
+
+    // ── Necklaces ───────────────────────────────────────────────────────────
+    {
+      sku: 'VJ-NECK-001',
+      name: 'Royal Empress Emerald Choker',
+      slug: 'royal-empress-emerald-choker',
+      categorySlug: 'necklaces',
+      description: 'Grand royal choker with graduated gold torque bands and a central faceted emerald drop.',
+      jewelleryKind: JewelleryKind.NECKLACE,
+      priceCents: 3499900,
+      currency: 'INR',
+      assetType: AssetType.MODEL_GLB,
+      assetUrl: 'procedural://necklace',
+      previewUrl: 'http://localhost:3000/assets/necklace-choker.svg',
+      anchorProfile: { anchorType: 'NECK_BASE' },
+      defaultScale: 1.0,
+      defaultRotationZ: 0,
+      mirrorForOppositeEar: false,
+      fingerIndex: null,
     },
     {
-      sku: 'DEMO-EARRING-003',
-      name: 'Pearl Stud Earrings',
-      slug: 'pearl-stud-earrings',
-      description: 'Lustrous freshwater pearl studs set in sterling silver.',
-      jewelleryKind: 'EARRINGS' as const,
-      priceCents: 599900,
+      sku: 'VJ-NECK-002',
+      name: 'Aura Solitaire Clavicle Pendant',
+      slug: 'aura-solitaire-clavicle-pendant',
+      categorySlug: 'necklaces',
+      description: 'Subtle 18k delicate gold chain suspending a floating teardrop diamond pendant.',
+      jewelleryKind: JewelleryKind.NECKLACE,
+      priceCents: 1899900,
       currency: 'INR',
-      overlayUrl: 'https://images.unsplash.com/photo-1589128777073-263566ae5e4d?w=400&h=400&fit=crop',
+      assetType: AssetType.IMAGE_OVERLAY,
+      assetUrl: 'http://localhost:3000/assets/necklace-pendant.svg',
+      previewUrl: 'http://localhost:3000/assets/necklace-pendant.svg',
+      anchorProfile: { anchorType: 'NECK_BASE' },
+      defaultScale: 1.1,
+      defaultRotationZ: 0,
+      mirrorForOppositeEar: false,
+      fingerIndex: null,
+    },
+
+    // ── Nose Rings ──────────────────────────────────────────────────────────
+    {
+      sku: 'VJ-NOSE-001',
+      name: 'Noor Diamond Septum Ring',
+      slug: 'noor-diamond-septum-ring',
+      categorySlug: 'nose-rings',
+      description: 'Handcrafted polished gold septum ring adorned with micro-pavé diamonds.',
+      jewelleryKind: JewelleryKind.NOSE_RING,
+      priceCents: 699900,
+      currency: 'INR',
+      assetType: AssetType.MODEL_GLB,
+      assetUrl: 'procedural://nose_ring',
+      previewUrl: 'http://localhost:3000/assets/nosering-septum.svg',
+      anchorProfile: { anchorType: 'NOSE_WING', side: 'LEFT' },
+      defaultScale: 0.7,
+      defaultRotationZ: 0,
+      mirrorForOppositeEar: false,
+      fingerIndex: null,
+    },
+    {
+      sku: 'VJ-NOSE-002',
+      name: 'Aethel Gold Nostril Stud',
+      slug: 'aethel-gold-nostril-stud',
+      categorySlug: 'nose-rings',
+      description: 'Traditional bezel-set floral diamond nose pin with 22k gold ball backing.',
+      jewelleryKind: JewelleryKind.NOSE_RING,
+      priceCents: 499900,
+      currency: 'INR',
+      assetType: AssetType.IMAGE_OVERLAY,
+      assetUrl: 'http://localhost:3000/assets/nosering-stud.svg',
+      previewUrl: 'http://localhost:3000/assets/nosering-stud.svg',
+      anchorProfile: { anchorType: 'NOSE_WING', side: 'LEFT' },
+      defaultScale: 0.6,
+      defaultRotationZ: 0,
+      mirrorForOppositeEar: false,
+      fingerIndex: null,
+    },
+
+    // ── Rings ───────────────────────────────────────────────────────────────
+    {
+      sku: 'VJ-RING-001',
+      name: 'Eternal Pavé Solitaire Ring',
+      slug: 'eternal-pave-solitaire-ring',
+      categorySlug: 'rings',
+      description: 'Certified 1.5 carat round brilliant diamond raised on a pavé-encrusted gold shank.',
+      jewelleryKind: JewelleryKind.RINGS,
+      priceCents: 2199900,
+      currency: 'INR',
+      assetType: AssetType.MODEL_GLB,
+      assetUrl: 'procedural://ring',
+      previewUrl: 'http://localhost:3000/assets/ring-solitaire.svg',
+      anchorProfile: { anchorType: 'FINGER_BASE', fingerIndex: 3 },
+      defaultScale: 1.0,
+      defaultRotationZ: 0,
+      mirrorForOppositeEar: false,
+      fingerIndex: 3,
+    },
+    {
+      sku: 'VJ-RING-002',
+      name: 'Lumière Platinum Wedding Band',
+      slug: 'lumiere-platinum-wedding-band',
+      categorySlug: 'rings',
+      description: 'Comfort-fit solid platinum court band with satin center and high-polish bevels.',
+      jewelleryKind: JewelleryKind.RINGS,
+      priceCents: 1599900,
+      currency: 'INR',
+      assetType: AssetType.IMAGE_OVERLAY,
+      assetUrl: 'http://localhost:3000/assets/ring-band.svg',
+      previewUrl: 'http://localhost:3000/assets/ring-band.svg',
+      anchorProfile: { anchorType: 'FINGER_BASE', fingerIndex: 3 },
+      defaultScale: 0.9,
+      defaultRotationZ: 0,
+      mirrorForOppositeEar: false,
+      fingerIndex: 3,
+    },
+
+    // ── Bangles ─────────────────────────────────────────────────────────────
+    {
+      sku: 'VJ-BANGLE-001',
+      name: 'Dynasty Filigree Gold Kada',
+      slug: 'dynasty-filigree-gold-kada',
+      categorySlug: 'bangles',
+      description: 'Heritage temple jewellery 22k gold open kada with embossed lion finials.',
+      jewelleryKind: JewelleryKind.BANGLES,
+      priceCents: 4599900,
+      currency: 'INR',
+      assetType: AssetType.MODEL_GLB,
+      assetUrl: 'procedural://bangle',
+      previewUrl: 'http://localhost:3000/assets/bangle-kada.svg',
+      anchorProfile: { anchorType: 'WRIST' },
+      defaultScale: 1.2,
+      defaultRotationZ: 0,
+      mirrorForOppositeEar: false,
+      fingerIndex: null,
+    },
+    {
+      sku: 'VJ-BANGLE-002',
+      name: 'Starlight Diamond Tennis Bracelet',
+      slug: 'starlight-diamond-tennis-bracelet',
+      categorySlug: 'bangles',
+      description: 'Continuous line of brilliant-cut diamonds articulated in 18k white gold.',
+      jewelleryKind: JewelleryKind.BANGLES,
+      priceCents: 2999900,
+      currency: 'INR',
+      assetType: AssetType.IMAGE_OVERLAY,
+      assetUrl: 'http://localhost:3000/assets/bangle-cuff.svg',
+      previewUrl: 'http://localhost:3000/assets/bangle-cuff.svg',
+      anchorProfile: { anchorType: 'WRIST' },
+      defaultScale: 1.1,
+      defaultRotationZ: 0,
+      mirrorForOppositeEar: false,
+      fingerIndex: null,
     },
   ];
 
-  for (const p of demoProducts) {
+  for (const item of catalogueItems) {
+    const categoryId = categoryMap[item.categorySlug];
+    if (!categoryId) continue;
+
     const product = await prisma.product.upsert({
-      where: { sku: p.sku },
+      where: { sku: item.sku },
       create: {
-        categoryId: earringCategory.id,
-        sku: p.sku,
-        name: p.name,
-        slug: p.slug,
-        description: p.description,
-        jewelleryKind: p.jewelleryKind,
+        categoryId,
+        sku: item.sku,
+        name: item.name,
+        slug: item.slug,
+        description: item.description,
+        jewelleryKind: item.jewelleryKind,
         status: 'PUBLISHED',
-        priceCents: p.priceCents,
-        currency: p.currency,
+        priceCents: item.priceCents,
+        currency: item.currency,
         publishedAt: new Date(),
       },
-      update: { status: 'PUBLISHED', publishedAt: new Date() },
+      update: {
+        categoryId,
+        name: item.name,
+        slug: item.slug,
+        description: item.description,
+        jewelleryKind: item.jewelleryKind,
+        status: 'PUBLISHED',
+        priceCents: item.priceCents,
+        currency: item.currency,
+        publishedAt: new Date(),
+      },
     });
 
-    // Upsert a primary image
-    const existingImage = await prisma.productImage.findFirst({
-      where: { productId: product.id, isPrimary: true },
+    // Primary product thumbnail
+    await prisma.productImage.deleteMany({ where: { productId: product.id } });
+    await prisma.productImage.create({
+      data: {
+        productId: product.id,
+        storageKey: `catalogue/${item.sku}/primary.svg`,
+        url: item.previewUrl,
+        altText: item.name,
+        isPrimary: true,
+        sortOrder: 0,
+      },
     });
-    if (!existingImage) {
-      await prisma.productImage.create({
-        data: {
-          productId: product.id,
-          storageKey: `demo/${p.sku}/primary.jpg`,
-          url: p.overlayUrl,
-          altText: p.name,
-          isPrimary: true,
-          sortOrder: 0,
-        },
-      });
-    }
 
-    // Upsert a jewellery asset (IMAGE_OVERLAY) used by the try-on engine
-    const existingAsset = await prisma.jewelleryAsset.findFirst({
-      where: { productId: product.id, assetType: 'IMAGE_OVERLAY' },
+    // Active Try-On Asset
+    await prisma.jewelleryAsset.deleteMany({ where: { productId: product.id } });
+    await prisma.jewelleryAsset.create({
+      data: {
+        productId: product.id,
+        kind: item.jewelleryKind,
+        assetType: item.assetType,
+        storageKey: `catalogue/${item.sku}/asset`,
+        url: item.assetUrl,
+        anchorProfile: item.anchorProfile,
+        defaultScale: item.defaultScale,
+        defaultRotationZ: item.defaultRotationZ,
+        mirrorForOppositeEar: item.mirrorForOppositeEar,
+        fingerIndex: item.fingerIndex,
+        isActive: true,
+      },
     });
-    if (!existingAsset) {
-      await prisma.jewelleryAsset.create({
-        data: {
-          productId: product.id,
-          kind: p.jewelleryKind,
-          assetType: 'IMAGE_OVERLAY',
-          storageKey: `demo/${p.sku}/overlay.jpg`,
-          url: p.overlayUrl,
-          anchorProfile: { type: 'ear', offsetX: 0, offsetY: 0, scaleX: 1, scaleY: 1 },
-          defaultScale: 1.0,
-          isActive: true,
-        },
-      });
-    }
   }
 
   await prisma.setting.upsert({
@@ -222,7 +395,7 @@ async function main() {
     update: { value: 30, isPublic: true },
   });
 
-  console.log('Seed complete. Admin:', admin.email, 'password: Admin@12345');
+  console.log('Seed completed successfully with 5 categories and 10 production assets.');
 }
 
 main()

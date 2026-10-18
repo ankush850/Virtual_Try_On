@@ -43,6 +43,7 @@ export const AnchorType = {
   NECK_BASE: 'NECK_BASE',
   FINGER_BASE: 'FINGER_BASE',
   WRIST: 'WRIST',
+  NOSE_WING: 'NOSE_WING',
 } as const;
 export type AnchorType = (typeof AnchorType)[keyof typeof AnchorType];
 
