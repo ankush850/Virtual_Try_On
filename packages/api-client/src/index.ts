@@ -10,4 +10,5 @@ export {
   type TryOnAnalyticsEvent,
   type TryOnProductAsset,
   type CaptureUploadTicket,
+  type AssetUploadResult,
 } from './services.js';

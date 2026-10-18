@@ -83,6 +83,14 @@ export interface CaptureUploadTicket {
   expiresIn: number;
 }
 
+export interface AssetUploadResult {
+  storageKey: string;
+  url: string;
+  filename: string;
+  size: number;
+  mimeType: string;
+}
+
 export function createTryOnApi(client: ApiClient) {
   return {
     startSession: (body: { productId: string; clientInfo?: Record<string, unknown> }) =>
@@ -168,6 +176,15 @@ export function createAdminApi(client: ApiClient) {
     publishProduct: (id: string) => client.post<ProductDetailDto>(`/admin/products/${id}/publish`),
     deleteProduct: (id: string) => client.delete<{ ok: boolean }>(`/admin/products/${id}`),
 
+    uploadAssetFile: async (file: File | Blob, filename?: string): Promise<AssetUploadResult> => {
+      const formData = new FormData();
+      if (typeof File !== 'undefined' && file instanceof File) {
+        formData.append('file', file);
+      } else {
+        formData.append('file', file, filename || 'asset.glb');
+      }
+      return client.post<AssetUploadResult>('/uploads/asset', formData);
+    },
     listProductAssets: (productId: string) =>
       client.get<unknown[]>(`/admin/products/${productId}/assets`),
     createProductAsset: (productId: string, body: Record<string, unknown>) =>

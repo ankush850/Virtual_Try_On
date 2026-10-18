@@ -13,3 +13,4 @@ apps/api/prisma/*.db
 tmp
 storage-data
 apps/api/storage-data
+*.tsbuildinfo

@@ -9,7 +9,8 @@
     "lint": "turbo lint"
   },
   "devDependencies": {
-    "turbo": "^2.3.3"
+    "turbo": "^2.3.3",
+    "vitest": "^5.0.5"
   },
   "packageManager": "pnpm@9.15.0"
 }
