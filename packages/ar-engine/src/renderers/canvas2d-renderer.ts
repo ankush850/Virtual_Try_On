@@ -88,7 +88,7 @@ export class Canvas2dRenderer {
     this.ctx.restore();
   }
 
-  drawJewellery(pose: PoseFit, secondary = false): void {
+  drawJewellery(pose: PoseFit, secondary = false, kind?: string): void {
     if (!this.image || !pose.visible) return;
 
     // Advance opacity with smooth interpolation.
@@ -103,11 +103,48 @@ export class Canvas2dRenderer {
     const img = this.image;
     const pos = secondary && pose.secondaryPosition ? pose.secondaryPosition : pose.position;
 
-    // Scale image proportionally to face/hand scale.
-    const baseSize = Math.max(img.naturalWidth, img.naturalHeight);
-    const displaySize = baseSize * pose.scale * 0.15;
-    const w = (img.naturalWidth  / baseSize) * displaySize;
-    const h = (img.naturalHeight / baseSize) * displaySize;
+    const isNecklace =
+      kind === 'NECKLACE' ||
+      kind === 'PENDANT' ||
+      kind === 'MANGALSUTRA' ||
+      this.currentUrl.includes('neck') ||
+      this.currentUrl.includes('pendant');
+
+    let w: number;
+    let h: number;
+    let originX: number;
+    let originY: number;
+
+    const aspect = img.naturalWidth > 0 && img.naturalHeight > 0
+      ? img.naturalHeight / img.naturalWidth
+      : 260 / 320;
+
+    if (isNecklace) {
+      // Real anatomical scale: necklace spans ~68-75% of biacromial shoulder width
+      // pose.scale is (shoulderWidth / 100) * defaultScale
+      // For average adult shoulder span of 300px in camera, w ≈ 210-230px
+      const shoulderSpan = pose.scale * 100;
+      w = Math.max(160, Math.min(480, shoulderSpan * 0.72));
+      h = w * aspect;
+      // Anchor origin at the top collar curve (y ~ 0.12 of asset height)
+      originX = -w / 2;
+      originY = -h * 0.12;
+    } else {
+      const isEarring = kind === 'EARRINGS' || this.currentUrl.includes('earring');
+      if (isEarring) {
+        w = Math.max(20, Math.min(100, pose.scale * 34));
+        h = w * aspect;
+        originX = -w / 2;
+        originY = -h * 0.08;
+      } else {
+        const baseSize = Math.max(img.naturalWidth, img.naturalHeight);
+        const displaySize = Math.max(20, baseSize * pose.scale * 0.35);
+        w = (img.naturalWidth / baseSize) * displaySize;
+        h = (img.naturalHeight / baseSize) * displaySize;
+        originX = -w / 2;
+        originY = -h / 2;
+      }
+    }
 
     this.ctx.save();
     this.ctx.globalAlpha = this.currentOpacity * (pose.confidence > 0 ? Math.min(1, pose.confidence + 0.3) : 1);
@@ -117,11 +154,11 @@ export class Canvas2dRenderer {
       this.ctx.scale(-1, 1);
     }
     // Apply subtle drop shadow for depth.
-    this.ctx.shadowColor   = 'rgba(0,0,0,0.25)';
+    this.ctx.shadowColor   = 'rgba(0,0,0,0.30)';
     this.ctx.shadowBlur    = 10;
     this.ctx.shadowOffsetY = 4;
     this.ctx.shadowOffsetX = 1;
-    this.ctx.drawImage(img, -w / 2, -h / 2, w, h);
+    this.ctx.drawImage(img, originX, originY, w, h);
     this.ctx.restore();
     this.ctx.globalAlpha = 1;
   }

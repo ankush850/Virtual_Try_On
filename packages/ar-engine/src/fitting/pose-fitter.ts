@@ -80,6 +80,19 @@ export class PoseFitter {
       return invisible;
     }
 
+    // If profile relies on shoulder/neck anchor and shoulders are not visible,
+    // do not render jewellery in a misplaced location.
+    if (
+      landmarks.shouldersVisible === false &&
+      (this.profile.primaryAnchor === 'NECK_BASE' ||
+        this.profile.primaryAnchor === 'COLLARBONE' ||
+        this.profile.primaryAnchor === 'NECKLACE_ANCHOR' ||
+        this.profile.scaleRef === 'SHOULDER_WIDTH')
+    ) {
+      this.visibilityAlpha = 0;
+      return invisible;
+    }
+
     // ── Primary anchor selection ──────────────────────────────────────────
     let primaryKey = this.profile.primaryAnchor;
     if (this.defaults.fingerIndex != null && this.defaults.fingerIndex >= 0) {

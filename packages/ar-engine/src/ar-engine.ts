@@ -435,9 +435,9 @@ export class ArEngine {
           if (is3d && this.threeRenderer) {
             this.threeRenderer.render(pose);
           } else if (!is3d && this.canvasRenderer) {
-            this.canvasRenderer.drawJewellery(pose, false);
+            this.canvasRenderer.drawJewellery(pose, false, this.config?.jewelleryKind);
             if (pose.secondaryPosition && this.config?.mirrorForOppositeEar !== false) {
-              this.canvasRenderer.drawJewellery(pose, true);
+              this.canvasRenderer.drawJewellery(pose, true, this.config?.jewelleryKind);
             }
           }
         } else if (this.is3DAsset(this.config) && this.threeRenderer) {
@@ -467,7 +467,24 @@ export class ArEngine {
     const dt = performance.now() - t0;
     this.adaptive.recordFrameMs(dt);
     const fps = this.fpsMeter.tick();
-    this.emit({ status: this.status, fps, latencyMs: dt });
+
+    let promptMessage: string | undefined;
+    let shouldersVisible: boolean | undefined;
+
+    if (this.lastLandmarks?.kind === 'pose') {
+      shouldersVisible = this.lastLandmarks.shouldersVisible !== false;
+      if (!shouldersVisible && this.config?.jewelleryKind === 'NECKLACE') {
+        promptMessage = 'Move back so your shoulders are visible';
+      }
+    }
+
+    this.emit({
+      status: this.status,
+      fps,
+      latencyMs: dt,
+      shouldersVisible,
+      promptMessage,
+    });
     this.frameIndex += 1;
     this.raf = requestAnimationFrame(() => void this.loop());
   };

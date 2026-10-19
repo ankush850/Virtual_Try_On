@@ -82,11 +82,23 @@ export class PoseDetector implements ModelAdapter {
       points.push(pt);
     };
 
+    let shouldersVisible = false;
+
     if (landmarks33 && landmarks33[11] && landmarks33[12]) {
       // MediaPipe Pose normalized coordinates [0, 1] -> pixel coordinates
       const lShoulder = landmarks33[11];
       const rShoulder = landmarks33[12];
       const nose = landmarks33[0];
+      const lEar = landmarks33[7];
+      const rEar = landmarks33[8];
+
+      // Robust shoulder visibility & frame boundary checks
+      const lVis = lShoulder.visibility ?? 1;
+      const rVis = rShoulder.visibility ?? 1;
+      const withinY = lShoulder.y <= 0.95 && rShoulder.y <= 0.95 && lShoulder.y >= 0.05 && rShoulder.y >= 0.05;
+      const withinX = lShoulder.x >= 0.02 && rShoulder.x <= 0.98;
+
+      shouldersVisible = lVis >= 0.45 && rVis >= 0.45 && withinY && withinX;
 
       const lsX = lShoulder.x * width;
       const lsY = lShoulder.y * height;
@@ -98,22 +110,38 @@ export class PoseDetector implements ModelAdapter {
       if (nose) {
         addPoint('NOSE', nose.x * width, nose.y * height, nose.z);
       }
+      if (lEar && rEar) {
+        addPoint('LEFT_EAR', lEar.x * width, lEar.y * height, lEar.z);
+        addPoint('RIGHT_EAR', rEar.x * width, rEar.y * height, rEar.z);
+      }
 
-      // Midpoint: Neck Base
+      // Midpoint: Neck Base (computed from shoulders 11 and 12 midpoint)
       const neckX = (lsX + rsX) / 2;
       const neckY = (lsY + rsY) / 2;
       const neckZ = ((lShoulder.z ?? 0) + (rShoulder.z ?? 0)) / 2;
 
       addPoint('NECK_BASE', neckX, neckY, neckZ);
 
-      // Collarbone (suprasternal notch / clavicle)
+      // Biacromial shoulder span
       const shoulderSpan = Math.hypot(rsX - lsX, rsY - lsY);
-      const collarY = neckY + shoulderSpan * 0.05;
+
+      // Collarbone (suprasternal notch / clavicle) shifted slightly toward chest
+      const collarY = neckY + shoulderSpan * 0.08;
       addPoint('COLLARBONE', neckX, collarY, neckZ);
       addPoint('NECKLACE_ANCHOR', neckX, collarY, neckZ);
 
-      // Scale source: real biacromial shoulder width
-      const rawScale = Math.max(80, shoulderSpan);
+      // Scale source: biacromial shoulder width, with face width fallback
+      let measuredWidth = shoulderSpan;
+      if (lEar && rEar) {
+        const faceWidth = Math.hypot(rEar.x * width - lEar.x * width, rEar.y * height - lEar.y * height);
+        named['FACE_WIDTH'] = { x: faceWidth, y: 0, name: 'FACE_WIDTH' };
+        if (!shouldersVisible || shoulderSpan < faceWidth * 1.3) {
+          measuredWidth = faceWidth * 2.3;
+        }
+      }
+      named['SHOULDER_WIDTH'] = { x: shoulderSpan, y: 0, name: 'SHOULDER_WIDTH' };
+
+      const rawScale = Math.max(80, measuredWidth);
       const alpha = this.frameCount < 5 ? 0.7 : 0.35;
       this.prevScaleRef = this.prevScaleRef + (rawScale - this.prevScaleRef) * alpha;
 
@@ -121,9 +149,9 @@ export class PoseDetector implements ModelAdapter {
       const shoulderAngle = Math.atan2(lsY - rsY, lsX - rsX);
       named['SHOULDER_ROT'] = { x: shoulderAngle, y: 0, name: 'SHOULDER_ROT' };
 
-      this.lastConfidence = Math.min(1, Math.max(0.5, (lShoulder.visibility ?? 0.8 + (rShoulder.visibility ?? 0.8)) / 2));
+      this.lastConfidence = Math.min(1, Math.max(0.5, (lVis + rVis) / 2));
     } else {
-      // Resilient synthetic fallback when camera sees upper torso or offline
+      // Resilient synthetic fallback when camera sees upper torso or offline/testing
       const midX = width * 0.5;
       const midY = height * 0.55;
       const approxSpan = width * 0.38;
@@ -135,12 +163,16 @@ export class PoseDetector implements ModelAdapter {
       addPoint('LEFT_SHOULDER', lsX, sy);
       addPoint('RIGHT_SHOULDER', rsX, sy);
       addPoint('NECK_BASE', midX, sy);
-      addPoint('COLLARBONE', midX, sy + approxSpan * 0.05);
-      addPoint('NECKLACE_ANCHOR', midX, sy + approxSpan * 0.05);
+      addPoint('COLLARBONE', midX, sy + approxSpan * 0.08);
+      addPoint('NECKLACE_ANCHOR', midX, sy + approxSpan * 0.08);
+      named['SHOULDER_WIDTH'] = { x: approxSpan, y: 0, name: 'SHOULDER_WIDTH' };
+      named['FACE_WIDTH'] = { x: approxSpan / 2.3, y: 0, name: 'FACE_WIDTH' };
 
       this.prevScaleRef = approxSpan;
       named['SHOULDER_ROT'] = { x: 0, y: 0, name: 'SHOULDER_ROT' };
       this.lastConfidence = 0.80;
+      // In offline/test synthetic fallback, default shouldersVisible to true
+      shouldersVisible = !this.poseLandmarker;
     }
 
     // Temporal smoothing per landmark
@@ -164,6 +196,7 @@ export class PoseDetector implements ModelAdapter {
       points,
       named,
       scaleRef: this.prevScaleRef,
+      shouldersVisible,
     };
   }
 

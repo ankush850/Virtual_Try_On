@@ -11,6 +11,7 @@ export type LandmarkResult = {
   points:     LandmarkPoint[];
   named:      Record<string, LandmarkPoint>;
   scaleRef:   number;
+  shouldersVisible?: boolean;
 };
 
 export type AnchorProfile = {
@@ -70,6 +71,8 @@ export type ArEngineEvents = {
   error?:     string;
   /** Fired when the jewellery asset finishes swapping in. */
   assetReady?: boolean;
+  promptMessage?: string;
+  shouldersVisible?: boolean;
 };
 
 export type CaptureOptions = {

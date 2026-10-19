@@ -9,6 +9,8 @@ export interface CameraHud {
   status: string;
   fps: number;
   error?: string;
+  promptMessage?: string;
+  shouldersVisible?: boolean;
 }
 
 export interface CameraComponentProps {
@@ -135,6 +137,12 @@ export function CameraComponent({
               Align Face
             </div>
           </div>
+        </div>
+      {/* Dynamic AR Guidance / Warning Banner */}
+      {running && hud.promptMessage ? (
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 rounded-full border border-amber-400/50 bg-black/85 px-4 py-1.5 text-xs font-medium text-amber-200 shadow-xl backdrop-blur-md animate-in fade-in">
+          <AlertCircle className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+          <span>{hud.promptMessage}</span>
         </div>
       ) : null}
 

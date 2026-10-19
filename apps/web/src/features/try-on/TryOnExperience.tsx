@@ -245,7 +245,13 @@ export function TryOnExperience({ product: initialProduct, alternativeProducts }
       const engine = new ArEngine();
       engineRef.current = engine;
       engine.on((e) => {
-        setHud({ status: e.status, fps: Math.round(e.fps), error: e.error });
+        setHud({
+          status: e.status,
+          fps: Math.round(e.fps),
+          error: e.error,
+          promptMessage: e.promptMessage,
+          shouldersVisible: e.shouldersVisible,
+        });
         setTracking(e.status === 'TRACKING');
         if (e.status !== lastStatus.current) {
           lastStatus.current = e.status;
