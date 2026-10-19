@@ -184,6 +184,12 @@ export class ArEngine {
   async setJewellery(config: JewelleryConfig): Promise<void> {
     if (!this.host || !this.canvasRenderer) return;
 
+    // Fully clear previous active asset from both renderers
+    if (this.threeRenderer) {
+      this.threeRenderer.clearJewellery();
+    }
+    this.canvasRenderer.clearJewellery();
+
     // Update fitter for new kind / anchor.
     const profile = AnchorRegistry.mergeProfile(config.jewelleryKind, config.anchorProfile);
     this.fitter = new PoseFitter(profile, {
@@ -212,10 +218,8 @@ export class ArEngine {
     // Load the new asset.
     await this._loadAsset(config);
 
-    // Update config reference.
-    if (this.config) {
-      this.config = { ...this.config, ...config };
-    }
+    // Replace config reference completely so old properties do not leak
+    this.config = { ...config };
 
     this.emit({ status: this.status, fps: this.fpsMeter.getFps(), assetReady: true });
   }
@@ -423,15 +427,16 @@ export class ArEngine {
         }
 
         if (!skipRender && this.status !== 'LOST' && pose.visible) {
-          if (this.threeRenderer) {
+          const is3d = this.is3DAsset(this.config);
+          if (is3d && this.threeRenderer) {
             this.threeRenderer.render(pose);
-          } else {
+          } else if (!is3d && this.canvasRenderer) {
             this.canvasRenderer.drawJewellery(pose, false);
             if (pose.secondaryPosition && this.config?.mirrorForOppositeEar !== false) {
               this.canvasRenderer.drawJewellery(pose, true);
             }
           }
-        } else if (this.threeRenderer) {
+        } else if (this.is3DAsset(this.config) && this.threeRenderer) {
           this.threeRenderer.render({ ...pose, visible: pose.visible && this.status !== 'LOST' });
         }
 
@@ -469,6 +474,36 @@ export class ArEngine {
 
   // ─── Private helpers ───────────────────────────────────────────────────────
 
+  is3DAsset(config?: JewelleryConfig | null): boolean {
+    if (!config) return false;
+    const type = String(config.assetType);
+    if (type === 'IMAGE_OVERLAY' || type === 'IMAGE_2D') return false;
+    if (
+      type === 'MODEL_GLB' ||
+      type === 'MODEL_GLTF' ||
+      type === 'MODEL_3D' ||
+      type === 'PROCEDURAL'
+    ) {
+      return true;
+    }
+    const url = config.assetUrl || '';
+    if (url.startsWith('procedural://')) return true;
+    if (url.endsWith('.glb') || url.endsWith('.gltf')) return true;
+    return false;
+  }
+
+  getThreeRenderer(): ThreeRenderer | null {
+    return this.threeRenderer;
+  }
+
+  getCanvasRenderer(): Canvas2dRenderer | null {
+    return this.canvasRenderer;
+  }
+
+  getActiveConfig(): JewelleryConfig | null {
+    return this.config;
+  }
+
   private async _loadAsset(config: JewelleryConfig): Promise<void> {
     let lastError: unknown;
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -491,33 +526,45 @@ export class ArEngine {
   private async _loadAssetOnce(config: JewelleryConfig): Promise<void> {
     if (!this.host || !this.canvasRenderer) return;
 
-    const use3d =
-      config.assetType === 'MODEL_GLB' ||
-      config.assetType === 'MODEL_GLTF' ||
-      config.assetUrl  === 'procedural://earring';
+    const use3d = this.is3DAsset(config);
 
     if (use3d && this.host.threeCanvas) {
+      // Clear 2D renderer so no lingering 2D image is drawn
+      this.canvasRenderer.clearJewellery();
+
       if (!this.threeRenderer) {
         this.threeRenderer = new ThreeRenderer(this.host.threeCanvas);
         this.syncCanvasSizes();
+      } else {
+        this.threeRenderer.clearJewellery();
       }
+
       await this.threeRenderer.loadModel(
-        config.assetUrl || 'procedural://earring',
-        config.mirrorForOppositeEar ?? true,
+        config.assetUrl || `procedural://${config.jewelleryKind.toLowerCase()}`,
+        config.mirrorForOppositeEar ?? (config.jewelleryKind === 'EARRINGS'),
       );
-    } else if (config.assetType === 'IMAGE_OVERLAY' || !use3d) {
-      if (config.assetUrl && config.assetUrl !== 'procedural://earring') {
+    } else {
+      // Clear 3D renderer completely so previous mesh does not remain frozen
+      if (this.threeRenderer) {
+        this.threeRenderer.clearJewellery();
+      }
+      this.canvasRenderer.clearJewellery();
+
+      if (config.assetUrl && !config.assetUrl.startsWith('procedural://')) {
         await this.canvasRenderer.loadOverlay(
           config.assetUrl,
           config.mirrorForOppositeEar ?? false,
         );
       } else if (this.host.threeCanvas) {
-        // Fallback procedural 3-D earring.
+        // Fallback to procedural 3D model for this specific category if no 2D image url
         if (!this.threeRenderer) {
           this.threeRenderer = new ThreeRenderer(this.host.threeCanvas);
           this.syncCanvasSizes();
         }
-        this.threeRenderer.loadProceduralEarring(config.mirrorForOppositeEar ?? true);
+        this.threeRenderer.loadProcedural(
+          config.jewelleryKind.toLowerCase(),
+          config.mirrorForOppositeEar ?? (config.jewelleryKind === 'EARRINGS'),
+        );
       }
     }
 

@@ -391,7 +391,26 @@ export class ThreeRenderer {
     }
   }
 
-  // ─── Dispose ───────────────────────────────────────────────────────────────
+  clearJewellery(): void {
+    this._clearGroups();
+    this.ready = false;
+    this.currentAssetUrl = null;
+    this.root.visible = false;
+    this.secondary.visible = false;
+    try {
+      this.renderer.clear();
+    } catch {
+      // In non-WebGL environments (e.g. testing) ignore clear error
+    }
+  }
+
+  hasActiveMesh(): boolean {
+    return this.ready && (this.root.children.length > 0 || this.secondary.children.length > 0);
+  }
+
+  getActiveUrl(): string | null {
+    return this.currentAssetUrl;
+  }
 
   dispose(): void {
     this._clearGroups();

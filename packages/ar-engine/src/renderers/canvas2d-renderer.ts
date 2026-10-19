@@ -130,6 +130,22 @@ export class Canvas2dRenderer {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
   }
 
+  clearJewellery(): void {
+    this.image = null;
+    this.currentUrl = '';
+    this.currentOpacity = 1;
+    this.targetOpacity = 1;
+    this.clear();
+  }
+
+  hasActiveOverlay(): boolean {
+    return this.image !== null;
+  }
+
+  getActiveUrl(): string {
+    return this.currentUrl;
+  }
+
   drawLandmarks(
     named:  Record<string, { x: number; y: number }>,
     keys:   string[],

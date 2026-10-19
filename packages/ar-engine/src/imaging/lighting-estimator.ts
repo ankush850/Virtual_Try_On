@@ -3,13 +3,16 @@
  * The engine uses this to lift Three.js exposure when the face is under-lit.
  */
 export class LightingEstimator {
-  private readonly canvas = document.createElement('canvas');
-  private readonly ctx: CanvasRenderingContext2D | null;
+  private readonly canvas: HTMLCanvasElement | null =
+    typeof document !== 'undefined' ? document.createElement('canvas') : null;
+  private readonly ctx: CanvasRenderingContext2D | null = null;
 
   constructor() {
-    this.canvas.width = 24;
-    this.canvas.height = 24;
-    this.ctx = this.canvas.getContext('2d', { willReadFrequently: true });
+    if (this.canvas) {
+      this.canvas.width = 24;
+      this.canvas.height = 24;
+      this.ctx = this.canvas.getContext('2d', { willReadFrequently: true });
+    }
   }
 
   estimate(
