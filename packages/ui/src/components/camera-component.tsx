@@ -79,35 +79,37 @@ export function CameraComponent({
         className,
       )}
     >
-      {/* Underlying WebCam Video Element */}
-      <video
-        ref={videoRef}
-        playsInline
-        muted
+      {/* Shared Video + AR Canvas Viewport (Single source of truth for preview mirroring) */}
+      <div
+        data-testid="camera-mirror-wrapper"
         className={cn(
-          'absolute inset-0 h-full w-full object-cover transition-transform',
+          'absolute inset-0 h-full w-full transition-transform duration-200',
           mirrorOn ? '-scale-x-100' : 'scale-x-100',
-          running ? 'opacity-100' : 'opacity-0',
         )}
-      />
+      >
+        {/* Underlying WebCam Video Element */}
+        <video
+          ref={videoRef}
+          playsInline
+          muted
+          className={cn(
+            'absolute inset-0 h-full w-full object-cover',
+            running ? 'opacity-100' : 'opacity-0',
+          )}
+        />
 
-      {/* 2D Canvas for landmarks/contours */}
-      <canvas
-        ref={overlayRef}
-        className={cn(
-          'absolute inset-0 h-full w-full pointer-events-none transition-transform',
-          mirrorOn ? '-scale-x-100' : 'scale-x-100',
-        )}
-      />
+        {/* 2D Canvas for landmarks/contours */}
+        <canvas
+          ref={overlayRef}
+          className="absolute inset-0 h-full w-full pointer-events-none"
+        />
 
-      {/* Three.js 3D WebGL Canvas for 3D jewellery rendering */}
-      <canvas
-        ref={threeRef}
-        className={cn(
-          'absolute inset-0 h-full w-full pointer-events-none transition-transform',
-          mirrorOn ? '-scale-x-100' : 'scale-x-100',
-        )}
-      />
+        {/* Three.js 3D WebGL Canvas for 3D jewellery rendering */}
+        <canvas
+          ref={threeRef}
+          className="absolute inset-0 h-full w-full pointer-events-none"
+        />
+      </div>
 
       {/* Shutter Flash Animation */}
       {flashing ? (

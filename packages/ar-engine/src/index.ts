@@ -21,4 +21,10 @@ export { ThreeRenderer } from './renderers/three-renderer.js';
 export { CaptureCompositor } from './capture/capture-compositor.js';
 export { loadOpenCv } from './opencv/opencv-loader.js';
 export { initTfBackend } from './models/tf-backend.js';
+export {
+  transformToScreen,
+  transformPoseToScreen,
+  resolvePhysicalEarMapping,
+} from './utils/coordinate-transform.js';
+export type { EarMappingResult } from './utils/coordinate-transform.js';
 export type * from './types.js';

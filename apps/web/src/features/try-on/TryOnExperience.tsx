@@ -285,6 +285,10 @@ export function TryOnExperience({ product: initialProduct, alternativeProducts }
   async function flipCamera() {
     try {
       await engineRef.current?.flipCamera();
+      const isMirrored = engineRef.current?.isMirrored();
+      if (typeof isMirrored === 'boolean') {
+        setMirrorOn(isMirrored);
+      }
       toast.info('Camera switched');
     } catch {
       toast.error('Unable to flip camera on this device');

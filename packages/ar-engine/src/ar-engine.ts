@@ -243,6 +243,14 @@ export class ArEngine {
     this.mirrored = on;
   }
 
+  isMirrored(): boolean {
+    return this.mirrored;
+  }
+
+  getFacing(): 'user' | 'environment' {
+    return this.camera.getFacing();
+  }
+
   async flipCamera(): Promise<void> {
     await this.camera.flip();
     this.mirrored = this.camera.getFacing() === 'user';
@@ -380,9 +388,9 @@ export class ArEngine {
           this.syncCanvasSizes();
         }
 
-        // Clear overlay; video draw is composited separately.
+        // Clear overlay for transparent 2D jewellery/landmarks rendering;
+        // video background is rendered by host video element in UI wrapper.
         this.canvasRenderer.clear();
-        this.canvasRenderer.drawVideo(video, this.mirrored);
 
         // Adapt quality tier to Three.js renderer
         const tier = this.adaptive.getQualityTier();
@@ -395,9 +403,7 @@ export class ArEngine {
 
         if (this.frameIndex % 8 === 0 && this.threeRenderer) {
           const size = this.lastPose?.scale ? this.lastPose.scale * 4 : video.videoWidth * 0.35;
-          const sampleX = this.lastPose
-            ? (this.mirrored ? video.videoWidth - this.lastPose.position.x : this.lastPose.position.x)
-            : video.videoWidth / 2;
+          const sampleX = this.lastPose ? this.lastPose.position.x : video.videoWidth / 2;
           const luma = this.lighting.estimate(video, {
             x: sampleX,
             y: this.lastPose?.position.y ?? video.videoHeight / 2,
@@ -417,7 +423,9 @@ export class ArEngine {
         }
 
         const rawPose = this.fitter.fit(this.lastLandmarks);
-        const pose    = this.mirrorPose(rawPose, this.host.overlayCanvas.width);
+        // Engine coordinates stay in raw unmirrored camera pixel space.
+        // Live preview mirroring is handled cleanly by CSS transform on the shared UI viewport.
+        const pose    = rawPose;
         this.lastPose = pose;
         this.status   = this.tracker.update(pose);
 
@@ -440,19 +448,13 @@ export class ArEngine {
           this.threeRenderer.render({ ...pose, visible: pose.visible && this.status !== 'LOST' });
         }
 
-        // Draw debug landmarks.
+        // Draw debug landmarks in raw coordinates (shared viewport handles visual flip).
         if (this.debugLandmarks && this.lastLandmarks) {
           const named  = this.lastLandmarks.named;
-          const width  = this.host.overlayCanvas.width;
-          const mirroredNamed = this.mirrored
-            ? Object.fromEntries(
-                Object.entries(named).map(([k, v]) => [k, { x: width - v.x, y: v.y }]),
-              )
-            : named;
           const keys = this.lastLandmarks.kind === 'face'
             ? FACE_LANDMARK_KEYS
             : HAND_LANDMARK_KEYS;
-          this.canvasRenderer.drawLandmarks(mirroredNamed, keys, 'dots');
+          this.canvasRenderer.drawLandmarks(named, keys, 'dots');
         }
       }
     } catch (err) {
