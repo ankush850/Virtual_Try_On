@@ -13,6 +13,7 @@ import {
   Info,
   Maximize2,
   Minimize2,
+  WifiOff,
 } from 'lucide-react';
 import {
   Button,
@@ -33,6 +34,11 @@ import { api } from '@/lib/api';
 import { assetCache } from '@/lib/asset-cache';
 import { useTryOnStore } from '@/stores/try-on-store';
 import { toJewelleryConfig, uploadCapture } from './try-on-bridge';
+import {
+  cacheCatalogue,
+  getCachedOrFallbackCatalogue,
+  getProductFromCacheOrFallback,
+} from './offline-catalog';
 import { TryOnCategorySwitch } from '@/components/try-on/try-on-category-switch';
 import { TryOnLoadingState } from '@/components/try-on/try-on-loading-state';
 import { TryOnErrorState } from '@/components/try-on/try-on-error-state';
@@ -74,6 +80,8 @@ export function TryOnExperience({ product: initialProduct, alternativeProducts }
     setMirrorOn,
   } = useTryOnStore();
 
+  const [isOfflineMode, setIsOfflineMode] = useState(false);
+
   // If initialProduct changes externally (e.g. navigation)
   useEffect(() => {
     setCurrentProduct(initialProduct);
@@ -82,7 +90,22 @@ export function TryOnExperience({ product: initialProduct, alternativeProducts }
   // Load alternative products for in-studio switcher if not provided
   const catalogQuery = useQuery({
     queryKey: queryKeys.products.list({ pageSize: 16 }),
-    queryFn: () => api.catalog.listProducts({ pageSize: 16 }),
+    queryFn: async () => {
+      try {
+        const res = await api.catalog.listProducts({ pageSize: 16 });
+        cacheCatalogue(res.items);
+        return res;
+      } catch {
+        const fallback = getCachedOrFallbackCatalogue();
+        return {
+          items: fallback,
+          total: fallback.length,
+          page: 1,
+          pageSize: fallback.length,
+          totalPages: 1,
+        };
+      }
+    },
     enabled: !alternativeProducts || alternativeProducts.length === 0,
   });
 
@@ -107,17 +130,33 @@ export function TryOnExperience({ product: initialProduct, alternativeProducts }
       : selectorItems.filter((item) => item.jewelleryKind === kindFilter);
   const selectorKey = selectorItems.map((item) => item.id).join(',');
 
-  // Start AR session with API
+  // Start AR session with API (falls back gracefully to client-side session when backend is offline)
   const sessionQuery = useQuery({
     queryKey: ['try-on', 'bootstrap', currentProduct.id],
-    queryFn: () =>
-      api.tryOn.startSession({
-        productId: currentProduct.id,
-        clientInfo: {
-          userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'browser',
-          deviceClass: typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches ? 'mobile' : 'desktop',
-        },
-      }),
+    queryFn: async () => {
+      try {
+        const session = await api.tryOn.startSession({
+          productId: currentProduct.id,
+          clientInfo: {
+            userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'browser',
+            deviceClass:
+              typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches
+                ? 'mobile'
+                : 'desktop',
+          },
+        });
+        setIsOfflineMode(false);
+        return session;
+      } catch {
+        // Backend offline: client-side engine still functions fully
+        setIsOfflineMode(true);
+        return {
+          sessionId: `offline-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          asset: currentProduct.tryOnAsset,
+          isOffline: true,
+        };
+      }
+    },
   });
 
   useEffect(() => {
@@ -157,7 +196,7 @@ export function TryOnExperience({ product: initialProduct, alternativeProducts }
   }, [selectorKey]);
 
   useEffect(() => {
-    if (!sessionId) return;
+    if (!sessionId || isOfflineMode || sessionId.startsWith('offline-')) return;
     const flush = () => {
       const metrics = engineRef.current?.getMetrics();
       if (metrics) {
@@ -186,7 +225,7 @@ export function TryOnExperience({ product: initialProduct, alternativeProducts }
       window.clearInterval(heartTimer);
       flush();
     };
-  }, [sessionId]);
+  }, [sessionId, isOfflineMode]);
 
   const asset = sessionQuery.data?.asset ?? currentProduct.tryOnAsset;
 
@@ -203,9 +242,13 @@ export function TryOnExperience({ product: initialProduct, alternativeProducts }
         setTracking(e.status === 'TRACKING');
         if (e.status !== lastStatus.current) {
           lastStatus.current = e.status;
-          pendingEvents.current.push({ type: 'tracking_change', value: e.status });
+          if (!isOfflineMode) {
+            pendingEvents.current.push({ type: 'tracking_change', value: e.status });
+          }
         }
-        if (e.error) pendingEvents.current.push({ type: 'engine_error', value: e.error });
+        if (e.error && !isOfflineMode) {
+          pendingEvents.current.push({ type: 'engine_error', value: e.error });
+        }
       });
 
       const config = await toJewelleryConfig(currentProduct.jewelleryKind, asset);
@@ -259,7 +302,14 @@ export function TryOnExperience({ product: initialProduct, alternativeProducts }
     if (item.id === currentProduct.id) return;
     try {
       toast.info(`Fitting ${item.name}…`);
-      const detail = await api.catalog.getProduct(item.id);
+      let detail: ProductDetailDto;
+      try {
+        detail = await api.catalog.getProduct(item.id);
+      } catch {
+        const fallback = getProductFromCacheOrFallback(item.id);
+        if (!fallback) throw new Error('Product not found in catalogue');
+        detail = fallback;
+      }
       setCurrentProduct(detail);
 
       // Update URL silently without full navigation
@@ -272,11 +322,13 @@ export function TryOnExperience({ product: initialProduct, alternativeProducts }
         await engineRef.current.setJewellery(
           await toJewelleryConfig(detail.jewelleryKind, detail.tryOnAsset),
         );
-        pendingEvents.current.push({
-          type: 'product_swap',
-          value: detail.id,
-          meta: { jewelleryKind: detail.jewelleryKind },
-        });
+        if (!isOfflineMode) {
+          pendingEvents.current.push({
+            type: 'product_swap',
+            value: detail.id,
+            meta: { jewelleryKind: detail.jewelleryKind },
+          });
+        }
         toast.success(`Now wearing ${detail.name}`);
       }
     } catch (err) {
@@ -298,7 +350,9 @@ export function TryOnExperience({ product: initialProduct, alternativeProducts }
       });
       setCurrentCaptureBlob(shot.blob);
       setCaptureMeta({ width: shot.width, height: shot.height });
-      pendingEvents.current.push({ type: 'capture', value: shot.width });
+      if (!isOfflineMode) {
+        pendingEvents.current.push({ type: 'capture', value: shot.width });
+      }
       const url = URL.createObjectURL(shot.blob);
       setPreviewUrl(url);
       setCaptureOpen(true);
@@ -308,10 +362,23 @@ export function TryOnExperience({ product: initialProduct, alternativeProducts }
     }
   };
 
-  // Save capture to user lookbook / server
+  // Save capture to user lookbook / server (with direct download in offline mode)
   const saveCaptureMutation = useMutation({
     mutationFn: async () => {
-      if (!sessionId || !currentCaptureBlob) throw new Error('No active try-on session');
+      if (!currentCaptureBlob) throw new Error('No snapshot captured');
+      if (isOfflineMode || sessionId?.startsWith('offline-')) {
+        // In offline mode, download directly to user's device
+        const url = URL.createObjectURL(currentCaptureBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `tryon-${currentProduct.slug}-${Date.now()}.jpg`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        return { id: `local-${Date.now()}`, storageKey: 'local' };
+      }
+      if (!sessionId) throw new Error('No active try-on session');
       return uploadCapture({
         sessionId,
         blob: currentCaptureBlob,
@@ -322,28 +389,36 @@ export function TryOnExperience({ product: initialProduct, alternativeProducts }
     onSuccess: (data) => {
       setLastCaptureId(data.id);
       setIsSavedInSession(true);
+      if (isOfflineMode || sessionId?.startsWith('offline-')) {
+        toast.success('Snapshot saved directly to your device');
+      }
     },
     onError: (err) => {
       toast.error(err instanceof Error ? err.message : 'Could not save capture to account');
     },
   });
 
-  if (sessionQuery.isLoading) {
+  if (sessionQuery.isLoading && !isOfflineMode) {
     return <TryOnLoadingState label="Initializing Luxury AR Studio…" subtext="Calibrating 3D sensors and camera stream" />;
-  }
-
-  if (sessionQuery.isError) {
-    return (
-      <TryOnErrorState
-        title="Studio Connection Issue"
-        description="We could not initiate your virtual fitting session. Please check your network connection."
-        onRetry={() => sessionQuery.refetch()}
-      />
-    );
   }
 
   return (
     <div className="space-y-6">
+      {/* Offline Mode Indicator Banner */}
+      {isOfflineMode && (
+        <div className="flex items-center justify-between rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-200">
+          <div className="flex items-center gap-2.5">
+            <WifiOff className="h-4 w-4 text-amber-400 shrink-0" />
+            <span>
+              <strong>Offline Studio Mode:</strong> Running client-side AR engine with bundled catalogue. Live virtual fitting and photo snapshots remain fully operational.
+            </span>
+          </div>
+          <Badge variant="outline" className="border-amber-400/50 text-amber-300 shrink-0 ml-3">
+            Offline Ready
+          </Badge>
+        </div>
+      )}
+
       {/* Studio Header Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
         <div>

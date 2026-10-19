@@ -10,6 +10,7 @@ import { api } from '@/lib/api';
 import { TryOnExperience } from '@/features/try-on/TryOnExperience';
 import { TryOnLoadingState } from '@/components/try-on/try-on-loading-state';
 import { TryOnErrorState } from '@/components/try-on/try-on-error-state';
+import { getProductFromCacheOrFallback } from '@/features/try-on/offline-catalog';
 
 export default function TryOnPage() {
   const params = useParams<{ productId: string }>();
@@ -17,7 +18,15 @@ export default function TryOnPage() {
 
   const productQuery = useQuery({
     queryKey: queryKeys.products.detail(productId),
-    queryFn: () => api.catalog.getProduct(productId),
+    queryFn: async () => {
+      try {
+        return await api.catalog.getProduct(productId);
+      } catch {
+        const fallback = getProductFromCacheOrFallback(productId);
+        if (fallback) return fallback;
+        throw new Error('Product not found in catalogue');
+      }
+    },
     enabled: Boolean(productId),
   });
 

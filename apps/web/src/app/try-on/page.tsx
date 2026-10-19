@@ -7,18 +7,46 @@ import { Button, PageLoader, EmptyState } from '@vj/ui';
 import { ArrowLeft, Sparkles } from 'lucide-react';
 import { api } from '@/lib/api';
 import { TryOnExperience } from '@/features/try-on/TryOnExperience';
+import {
+  cacheCatalogue,
+  getCachedOrFallbackCatalogue,
+  getProductFromCacheOrFallback,
+} from '@/features/try-on/offline-catalog';
 
 export default function TryOnStudioHubPage() {
   const productsQuery = useQuery({
     queryKey: queryKeys.products.list({ pageSize: 12 }),
-    queryFn: () => api.catalog.listProducts({ pageSize: 12 }),
+    queryFn: async () => {
+      try {
+        const res = await api.catalog.listProducts({ pageSize: 12 });
+        cacheCatalogue(res.items);
+        return res;
+      } catch {
+        const fallback = getCachedOrFallbackCatalogue();
+        return {
+          items: fallback,
+          total: fallback.length,
+          page: 1,
+          pageSize: fallback.length,
+          totalPages: 1,
+        };
+      }
+    },
   });
 
   const featured = productsQuery.data?.items[0];
 
   const productDetailQuery = useQuery({
     queryKey: queryKeys.products.detail(featured?.id ?? ''),
-    queryFn: () => api.catalog.getProduct(featured!.id),
+    queryFn: async () => {
+      try {
+        return await api.catalog.getProduct(featured!.id);
+      } catch {
+        const fallback = getProductFromCacheOrFallback(featured!.id);
+        if (fallback) return fallback;
+        throw new Error('Product not found in catalogue');
+      }
+    },
     enabled: Boolean(featured?.id),
   });
 
