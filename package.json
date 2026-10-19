@@ -33,7 +33,6 @@
       "braces": ">=3.0.3",
       "multer": ">=2.3.0",
       "next": "15.5.28",
-      "ajv": ">=8.18.0",
       "webpack": ">=5.104.1",
       "postcss-selector-parser": ">=7.1.6"
     }
