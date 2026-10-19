@@ -217,6 +217,7 @@ export function CameraComponent({
           </div>
           <Button
             size="lg"
+            data-testid="start-camera-btn"
             onClick={onStart}
             disabled={starting}
             className="rounded-full px-8 py-6 font-medium shadow-xl shadow-primary/20 hover:scale-105 transition-transform"
@@ -244,6 +245,7 @@ export function CameraComponent({
           {/* Shutter Button */}
           <button
             type="button"
+            data-testid="shutter-btn"
             onClick={triggerShutter}
             disabled={captureDisabled || countdown !== null}
             title="Take Studio Snapshot"

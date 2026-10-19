@@ -57,6 +57,7 @@ export function JewellerySelector({
             <button
               key={item.id}
               type="button"
+              data-testid="jewellery-selector-item"
               onClick={() => onSelect(item)}
               className={cn(
                 'group relative flex-shrink-0 flex items-center gap-2.5 rounded-xl border p-1.5 transition-all text-left duration-200 select-none',

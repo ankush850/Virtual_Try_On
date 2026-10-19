@@ -164,9 +164,16 @@ export function TryOnExperience({ product: initialProduct, alternativeProducts }
   }, [sessionQuery.data?.sessionId, setSessionId]);
 
   useEffect(() => {
-    return () => {
+    const handleLeave = () => {
       engineRef.current?.stop();
       engineRef.current = null;
+    };
+    window.addEventListener('beforeunload', handleLeave);
+    window.addEventListener('pagehide', handleLeave);
+    return () => {
+      window.removeEventListener('beforeunload', handleLeave);
+      window.removeEventListener('pagehide', handleLeave);
+      handleLeave();
     };
   }, []);
 
@@ -266,8 +273,23 @@ export function TryOnExperience({ product: initialProduct, alternativeProducts }
       );
       setRunning(true);
       toast.success('Studio camera connected');
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not access camera');
+    } catch (err: unknown) {
+      const errorObj = err as { name?: string; message?: string };
+      const errName = errorObj?.name || '';
+      const errMsg = errorObj?.message || '';
+
+      let friendlyMessage = 'Could not access camera. Please check device permissions and try again.';
+      if (errName === 'NotAllowedError' || errName === 'PermissionDeniedError' || /permission/i.test(errMsg)) {
+        friendlyMessage = 'Camera permission denied. Please allow camera access in your browser settings to try on jewellery.';
+      } else if (errName === 'NotFoundError' || errName === 'DevicesNotFoundError' || /not found/i.test(errMsg)) {
+        friendlyMessage = 'No camera detected on this device. Please connect a webcam or switch to a smartphone with a camera.';
+      } else if (errName === 'NotReadableError' || errName === 'TrackStartError' || /in use/i.test(errMsg)) {
+        friendlyMessage = 'Camera is currently in use by another application. Please close other camera tabs/apps and retry.';
+      } else if (errName === 'OverconstrainedError') {
+        friendlyMessage = 'Camera does not support requested resolution. Trying fallback settings…';
+      }
+
+      toast.error(friendlyMessage);
       setRunning(false);
     } finally {
       setStarting(false);

@@ -1,4 +1,4 @@
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -38,8 +38,9 @@ async function bootstrap() {
 
   const port = config.get<number>('port') ?? 4000;
   await app.listen(port);
-  console.log(`API listening on http://localhost:${port}/api/v1`);
-  console.log(`Swagger at http://localhost:${port}/api/docs`);
+  const logger = new Logger('Bootstrap');
+  logger.log(`API listening on http://localhost:${port}/api/v1`);
+  logger.log(`Swagger at http://localhost:${port}/api/docs`);
 }
 
 bootstrap();
