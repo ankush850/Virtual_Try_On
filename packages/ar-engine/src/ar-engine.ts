@@ -125,9 +125,11 @@ export class ArEngine {
     try {
       await this.camera.init(host.video, { facing: 'user' });
     } catch (err) {
-      // Try permission recovery then retry.
-      await this.camera.recoverPermission();
-      await this.camera.init(host.video, { facing: 'user' });
+      try {
+        await this.camera.recoverPermission();
+      } catch {
+        throw err;
+      }
     }
 
     // Camera health monitoring

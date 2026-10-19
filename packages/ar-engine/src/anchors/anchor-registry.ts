@@ -131,9 +131,17 @@ register(JewelleryKind.WATCH, {
 
 export const AnchorRegistry = {
   get(kind: string): AnchorRegistration {
-    const found = registry.get(kind);
+    const k = (kind ?? '').toUpperCase().trim();
+    let found = registry.get(k);
     if (!found) {
-      throw new Error(`No anchor registration for jewellery kind: ${kind}`);
+      if (k === 'RING') found = registry.get(JewelleryKind.RINGS);
+      else if (k === 'BANGLE') found = registry.get(JewelleryKind.BANGLES);
+      else if (k === 'EARRING') found = registry.get(JewelleryKind.EARRINGS);
+      else if (k === 'NECKLACES') found = registry.get(JewelleryKind.NECKLACE);
+      else if (k === 'NOSE_RINGS' || k === 'NOSERING') found = registry.get(JewelleryKind.NOSE_RING);
+    }
+    if (!found) {
+      found = registry.get(JewelleryKind.EARRINGS)!;
     }
     return found;
   },
