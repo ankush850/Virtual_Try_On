@@ -6,11 +6,34 @@
     "dev": "turbo dev",
     "build": "turbo build",
     "typecheck": "turbo typecheck",
-    "lint": "turbo lint"
+    "lint": "turbo lint",
+    "test": "vitest run"
   },
   "devDependencies": {
     "turbo": "^2.3.3",
     "vitest": "^5.0.5"
   },
-  "packageManager": "pnpm@9.15.0"
+  "packageManager": "pnpm@9.15.0",
+  "pnpm": {
+    "overrides": {
+      "tar": ">=7.5.21",
+      "glob": ">=10.5.0",
+      "picomatch": ">=4.0.7",
+      "lodash": ">=4.18.0",
+      "tmp": ">=0.2.6",
+      "js-yaml": ">=4.3.2",
+      "postcss": ">=8.5.18",
+      "body-parser": ">=1.20.6",
+      "qs": ">=6.16.1",
+      "source-map-js": ">=1.2.2",
+      "sharp": ">=0.35.5",
+      "deepmerge-ts": ">=8.0.0",
+      "braces": ">=3.0.3",
+      "multer": ">=2.3.0",
+      "next": "15.5.28",
+      "ajv": ">=8.18.0",
+      "webpack": ">=5.104.1",
+      "postcss-selector-parser": ">=7.1.6"
+    }
+  }
 }

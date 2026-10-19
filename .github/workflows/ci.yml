@@ -19,15 +19,19 @@ jobs:
           cache: pnpm
       - name: Install
         run: pnpm install
-      - name: Build shared
+      - name: Security Audit
+        run: pnpm audit --audit-level=critical
+      - name: Build Shared Packages
         run: pnpm --filter @vj/shared build && pnpm --filter @vj/types build
       - name: Prisma generate
         run: pnpm --filter @vj/api prisma:generate
         env:
           DATABASE_URL: postgresql://vj:vjsecret@localhost:5432/vj_tryon?schema=public
-      - name: Typecheck API
-        run: pnpm --filter @vj/api typecheck
-      - name: Build API
-        run: pnpm --filter @vj/api build
-      - name: Build AR engine
-        run: pnpm --filter @vj/ar-engine build
+      - name: Lint
+        run: pnpm lint
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Test Suite
+        run: pnpm test
+      - name: Build All
+        run: pnpm build
