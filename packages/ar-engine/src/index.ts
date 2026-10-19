@@ -27,5 +27,10 @@ export {
   transformPoseToScreen,
   resolvePhysicalEarMapping,
 } from './utils/coordinate-transform.js';
-export type { EarMappingResult } from './utils/coordinate-transform.js';
+export {
+  isFaceCentered,
+  evaluateFaceGuideStatus,
+  shouldHideFaceGuide,
+} from './tracking/face-guide-state.js';
+export type { FaceGuideStatus, FrameDimensions } from './tracking/face-guide-state.js';
 export type * from './types.js';

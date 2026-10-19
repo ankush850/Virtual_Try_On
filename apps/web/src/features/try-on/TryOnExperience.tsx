@@ -251,6 +251,7 @@ export function TryOnExperience({ product: initialProduct, alternativeProducts }
           error: e.error,
           promptMessage: e.promptMessage,
           shouldersVisible: e.shouldersVisible,
+          faceCentered: e.faceCentered,
         });
         setTracking(e.status === 'TRACKING');
         if (e.status !== lastStatus.current) {

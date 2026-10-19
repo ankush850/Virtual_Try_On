@@ -17,6 +17,7 @@ import { CaptureCompositor } from './capture/capture-compositor.js';
 import { LightingEstimator } from './imaging/lighting-estimator.js';
 import { initTfBackend } from './models/tf-backend.js';
 import type { ModelAdapter } from './models/model-adapter.js';
+import { isFaceCentered } from './tracking/face-guide-state.js';
 import type {
   ArEngineConfig,
   ArEngineEvents,
@@ -478,12 +479,29 @@ export class ArEngine {
       }
     }
 
+    let faceCentered = false;
+    if (this.status === 'TRACKING' && this.lastLandmarks) {
+      const p =
+        this.lastLandmarks.named['NOSE'] ??
+        this.lastLandmarks.named['NOSE_TIP'] ??
+        this.lastLandmarks.named['CHIN'] ??
+        this.lastLandmarks.named['NECK_BASE'];
+      const videoW = this.host?.video.videoWidth || this.host?.overlayCanvas.width || 640;
+      const videoH = this.host?.video.videoHeight || this.host?.overlayCanvas.height || 480;
+      if (p && videoW > 0 && videoH > 0) {
+        faceCentered = isFaceCentered(p, { width: videoW, height: videoH });
+      } else {
+        faceCentered = true;
+      }
+    }
+
     this.emit({
       status: this.status,
       fps,
       latencyMs: dt,
       shouldersVisible,
       promptMessage,
+      faceCentered,
     });
     this.frameIndex += 1;
     this.raf = requestAnimationFrame(() => void this.loop());

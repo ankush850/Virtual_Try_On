@@ -11,6 +11,7 @@ export interface CameraHud {
   error?: string;
   promptMessage?: string;
   shouldersVisible?: boolean;
+  faceCentered?: boolean;
 }
 
 export interface CameraComponentProps {
@@ -51,9 +52,30 @@ export function CameraComponent({
   promptText = 'Position yourself in front of the camera for real-time jewellery fitting.',
 }: CameraComponentProps) {
   const [guideOn, setGuideOn] = React.useState(true);
+  const [guideDismissed, setGuideDismissed] = React.useState(false);
   const [brightMode, setBrightMode] = React.useState(false);
   const [countdown, setCountdown] = React.useState<number | null>(null);
   const [flashing, setFlashing] = React.useState(false);
+
+  // Auto-dismiss "ALIGN FACE" guide when face is detected, centered, and stable for ~300 ms
+  React.useEffect(() => {
+    if (!running) {
+      setGuideDismissed(false);
+      return;
+    }
+
+    const isAligned = hud.status === 'TRACKING' && hud.faceCentered !== false;
+
+    if (isAligned) {
+      const timer = setTimeout(() => {
+        setGuideDismissed(true);
+      }, 300);
+      return () => clearTimeout(timer);
+    } else {
+      // Re-display guide immediately if tracking is lost or face drifts off-center
+      setGuideDismissed(false);
+    }
+  }, [running, hud.status, hud.faceCentered]);
 
   const triggerShutter = React.useCallback(() => {
     if (captureDisabled || !running || countdown !== null) return;
@@ -128,9 +150,15 @@ export function CameraComponent({
         </div>
       ) : null}
 
-      {/* Subtle AR Alignment Guide Overlay */}
+      {/* Subtle AR Alignment Guide Overlay (Auto-dismisses when face is stable & centered) */}
       {running && guideOn ? (
-        <div className="pointer-events-none absolute inset-x-0 top-0 bottom-24 flex items-center justify-center p-8">
+        <div
+          data-testid="face-alignment-guide"
+          className={cn(
+            'pointer-events-none absolute inset-x-0 top-0 bottom-24 flex items-center justify-center p-8 transition-opacity duration-300',
+            guideDismissed ? 'opacity-0' : 'opacity-100',
+          )}
+        >
           <div className="relative h-[65%] w-[60%] rounded-[45%] border border-dashed border-primary/40 opacity-70 animate-pulse">
             <div className="absolute top-[28%] left-[20%] right-[20%] border-t border-dotted border-primary/30" />
             <div className="absolute top-[50%] left-[30%] right-[30%] border-t border-dotted border-primary/30" />
@@ -139,6 +167,7 @@ export function CameraComponent({
             </div>
           </div>
         </div>
+      ) : null}
       {/* Dynamic AR Guidance / Warning Banner */}
       {running && hud.promptMessage ? (
         <div className="absolute top-14 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 rounded-full border border-amber-400/50 bg-black/85 px-4 py-1.5 text-xs font-medium text-amber-200 shadow-xl backdrop-blur-md animate-in fade-in">

@@ -73,6 +73,7 @@ export type ArEngineEvents = {
   assetReady?: boolean;
   promptMessage?: string;
   shouldersVisible?: boolean;
+  faceCentered?: boolean;
 };
 
 export type CaptureOptions = {
