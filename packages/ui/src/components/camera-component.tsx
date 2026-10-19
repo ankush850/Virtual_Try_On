@@ -46,7 +46,7 @@ export function CameraComponent({
   onMirrorToggle,
   onCapture,
   captureDisabled = false,
-  aspectRatioClass = 'aspect-[3/4]',
+  aspectRatioClass = 'aspect-[4/5]',
   className,
   promptText = 'Position yourself in front of the camera for real-time jewellery fitting.',
 }: CameraComponentProps) {
@@ -81,11 +81,12 @@ export function CameraComponent({
         className,
       )}
     >
-      {/* Shared Video + AR Canvas Viewport (Single source of truth for preview mirroring) */}
+      {/* Shared Video + AR Canvas Viewport (Single source of truth with bottom safe zone) */}
       <div
         data-testid="camera-mirror-wrapper"
         className={cn(
-          'absolute inset-0 h-full w-full transition-transform duration-200',
+          'absolute inset-x-0 top-0 transition-transform duration-200',
+          running ? 'bottom-24' : 'bottom-0',
           mirrorOn ? '-scale-x-100' : 'scale-x-100',
         )}
       >
@@ -95,21 +96,21 @@ export function CameraComponent({
           playsInline
           muted
           className={cn(
-            'absolute inset-0 h-full w-full object-cover',
+            'absolute inset-0 h-full w-full object-cover object-center',
             running ? 'opacity-100' : 'opacity-0',
           )}
         />
 
-        {/* 2D Canvas for landmarks/contours */}
+        {/* 2D Canvas for landmarks/contours (Identical object-fit & crop) */}
         <canvas
           ref={overlayRef}
-          className="absolute inset-0 h-full w-full pointer-events-none"
+          className="absolute inset-0 h-full w-full object-cover object-center pointer-events-none"
         />
 
-        {/* Three.js 3D WebGL Canvas for 3D jewellery rendering */}
+        {/* Three.js 3D WebGL Canvas for 3D jewellery rendering (Identical object-fit & crop) */}
         <canvas
           ref={threeRef}
-          className="absolute inset-0 h-full w-full pointer-events-none"
+          className="absolute inset-0 h-full w-full object-cover object-center pointer-events-none"
         />
       </div>
 
@@ -129,7 +130,7 @@ export function CameraComponent({
 
       {/* Subtle AR Alignment Guide Overlay */}
       {running && guideOn ? (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-8">
+        <div className="pointer-events-none absolute inset-x-0 top-0 bottom-24 flex items-center justify-center p-8">
           <div className="relative h-[65%] w-[60%] rounded-[45%] border border-dashed border-primary/40 opacity-70 animate-pulse">
             <div className="absolute top-[28%] left-[20%] right-[20%] border-t border-dotted border-primary/30" />
             <div className="absolute top-[50%] left-[30%] right-[30%] border-t border-dotted border-primary/30" />
@@ -237,15 +238,15 @@ export function CameraComponent({
         </div>
       ) : null}
 
-      {/* In-view Bottom Shutter Bar */}
+      {/* Dedicated Bottom Safe Zone Shutter Bar (Never covers jewellery or neck) */}
       {running ? (
-        <div className="absolute bottom-4 left-0 right-0 z-20 flex items-center justify-center gap-4 px-6">
+        <div className="absolute bottom-0 left-0 right-0 h-24 z-20 flex items-center justify-center gap-5 px-6 bg-gradient-to-t from-black via-black/90 to-transparent border-t border-white/10 backdrop-blur-sm">
           <Button
             type="button"
             variant="outline"
             size="sm"
             onClick={onStop}
-            className="rounded-full bg-black/60 text-white hover:bg-black/80 border-white/20 text-xs backdrop-blur-md"
+            className="rounded-full bg-black/70 text-white hover:bg-black/90 border-white/20 text-xs backdrop-blur-md shadow-md"
           >
             Close Camera
           </Button>
@@ -257,7 +258,7 @@ export function CameraComponent({
             onClick={triggerShutter}
             disabled={captureDisabled || countdown !== null}
             title="Take Studio Snapshot"
-            className="group relative flex h-16 w-16 items-center justify-center rounded-full border-4 border-white/80 bg-primary shadow-xl hover:scale-105 active:scale-95 transition-all duration-150 disabled:opacity-50"
+            className="group relative flex h-16 w-16 items-center justify-center rounded-full border-4 border-white/90 bg-primary shadow-2xl hover:scale-105 active:scale-95 transition-all duration-150 disabled:opacity-50"
           >
             <div className="h-11 w-11 rounded-full bg-white transition group-hover:bg-primary-foreground" />
             <Camera className="absolute h-5 w-5 text-primary group-hover:text-white transition" />
@@ -269,7 +270,7 @@ export function CameraComponent({
             size="sm"
             onClick={triggerShutter}
             disabled={captureDisabled || countdown !== null}
-            className="rounded-full bg-black/60 text-white hover:bg-black/80 border-white/20 text-xs backdrop-blur-md"
+            className="rounded-full bg-black/70 text-white hover:bg-black/90 border-white/20 text-xs backdrop-blur-md shadow-md"
           >
             Capture
           </Button>
@@ -278,7 +279,7 @@ export function CameraComponent({
 
       {/* Error banner if camera fails */}
       {hud.error ? (
-        <div className="absolute bottom-20 left-4 right-4 z-30 rounded-xl border border-destructive/50 bg-destructive/90 p-3 text-center text-xs text-white backdrop-blur-md flex items-center justify-center gap-2">
+        <div className="absolute bottom-28 left-4 right-4 z-30 rounded-xl border border-destructive/50 bg-destructive/90 p-3 text-center text-xs text-white backdrop-blur-md flex items-center justify-center gap-2">
           <AlertCircle className="h-4 w-4 shrink-0" />
           <span>{hud.error}</span>
         </div>
