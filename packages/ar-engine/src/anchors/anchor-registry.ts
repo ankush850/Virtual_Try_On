@@ -1,7 +1,7 @@
 import { JewelleryKind } from '@vj/shared';
 import type { AnchorProfile } from '../types.js';
 
-export type DetectorKind = 'face' | 'hand';
+export type DetectorKind = 'face' | 'hand' | 'pose';
 
 export type AnchorRegistration = {
   detector: DetectorKind;
@@ -27,24 +27,25 @@ register(JewelleryKind.EARRINGS, {
 });
 
 register(JewelleryKind.NECKLACE, {
-  detector: 'face',
+  detector: 'pose',
   defaultProfile: {
-    primaryAnchor: 'CHIN',
-    scaleRef: 'FACE_WIDTH',
-    offset: { x: 0, y: 0.35, z: 0 },
-    minScale: 0.5,
-    maxScale: 3,
+    primaryAnchor: 'NECK_BASE',
+    scaleRef: 'SHOULDER_WIDTH',
+    offset: { x: 0, y: 0.04, z: 0 },
+    minScale: 0.4,
+    maxScale: 3.0,
   },
 });
 
 register(JewelleryKind.NOSE_RING, {
   detector: 'face',
   defaultProfile: {
-    primaryAnchor: 'NOSE_TIP',
-    scaleRef: 'FACE_WIDTH',
-    offset: { x: 0.02, y: 0.01, z: 0 },
+    primaryAnchor: 'LEFT_NOSE_WING',
+    secondaryAnchor: 'NOSE_TIP',
+    scaleRef: 'NOSE_WING_WIDTH',
+    offset: { x: 0, y: 0, z: 0 },
     minScale: 0.2,
-    maxScale: 1.5,
+    maxScale: 1.8,
   },
 });
 
@@ -61,31 +62,33 @@ register(JewelleryKind.SUNGLASSES, {
 });
 
 register(JewelleryKind.PENDANT, {
-  detector: 'face',
+  detector: 'pose',
   defaultProfile: {
-    primaryAnchor: 'CHIN',
-    scaleRef: 'FACE_WIDTH',
-    offset: { x: 0, y: 0.45, z: 0 },
-    minScale: 0.4,
-    maxScale: 2.5,
+    primaryAnchor: 'NECK_BASE',
+    secondaryAnchor: 'COLLARBONE',
+    scaleRef: 'SHOULDER_WIDTH',
+    offset: { x: 0, y: 0.12, z: 0 },
+    minScale: 0.35,
+    maxScale: 2.8,
   },
 });
 
 register(JewelleryKind.MANGALSUTRA, {
-  detector: 'face',
+  detector: 'pose',
   defaultProfile: {
-    primaryAnchor: 'CHIN',
-    scaleRef: 'FACE_WIDTH',
-    offset: { x: 0, y: 0.4, z: 0 },
-    minScale: 0.5,
-    maxScale: 3,
+    primaryAnchor: 'NECK_BASE',
+    secondaryAnchor: 'COLLARBONE',
+    scaleRef: 'SHOULDER_WIDTH',
+    offset: { x: 0, y: 0.08, z: 0 },
+    minScale: 0.4,
+    maxScale: 3.0,
   },
 });
 
 register(JewelleryKind.RINGS, {
   detector: 'hand',
   defaultProfile: {
-    primaryAnchor: 'RING_SLOT_1',
+    primaryAnchor: 'RING_SLOT_3',
     scaleRef: 'HAND_SCALE',
     offset: { x: 0, y: 0, z: 0 },
     minScale: 0.3,
@@ -96,7 +99,7 @@ register(JewelleryKind.RINGS, {
 register(JewelleryKind.BANGLES, {
   detector: 'hand',
   defaultProfile: {
-    primaryAnchor: 'WRIST',
+    primaryAnchor: 'BANGLE_ANCHOR',
     scaleRef: 'HAND_SCALE',
     offset: { x: 0, y: 0, z: 0 },
     minScale: 0.5,

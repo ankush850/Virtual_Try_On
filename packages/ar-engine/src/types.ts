@@ -6,7 +6,7 @@ export type Vec3 = { x: number; y: number; z: number };
 export type LandmarkPoint = Vec2 & { z?: number; name?: string };
 
 export type LandmarkResult = {
-  kind:       'face' | 'hand';
+  kind:       'face' | 'hand' | 'pose';
   confidence: number;
   points:     LandmarkPoint[];
   named:      Record<string, LandmarkPoint>;

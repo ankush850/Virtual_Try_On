@@ -108,7 +108,12 @@ export class PoseFitter {
     // Depth-aware scale: if z-coordinates are available, adjust by relative depth.
     const primaryZ = (primary as { z?: number }).z;
     if (primaryZ != null && Number.isFinite(primaryZ)) {
-      const refKey = landmarks.kind === 'face' ? 'NOSE_TIP' : 'WRIST';
+      const refKey =
+        landmarks.kind === 'face'
+          ? 'NOSE_TIP'
+          : landmarks.kind === 'pose'
+            ? 'NECK_BASE'
+            : 'WRIST';
       const refZ = (landmarks.named[refKey] as { z?: number } | undefined)?.z;
       if (refZ != null && Number.isFinite(refZ)) {
         const depthFactor = Math.max(0.6, Math.min(1.4, 1 + (refZ - primaryZ) * 0.008));
@@ -138,6 +143,11 @@ export class PoseFitter {
         targetRotation = rotPt.x; // pre-computed angle stored in x
       } else if (dirPt) {
         targetRotation = Math.atan2(dirPt.y, dirPt.x);
+      }
+    } else if (landmarks.kind === 'pose') {
+      const shoulderRot = landmarks.named['SHOULDER_ROT'];
+      if (shoulderRot && Number.isFinite(shoulderRot.x)) {
+        targetRotation = shoulderRot.x;
       }
     } else if (landmarks.kind === 'hand') {
       // Bangle/bracelet: prefer BANGLE_ROT, fallback to WRIST_DIR

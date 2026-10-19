@@ -17,11 +17,12 @@
     "dev": "tsc -p tsconfig.json --watch"
   },
   "dependencies": {
+    "@mediapipe/tasks-vision": "^1.1.1",
+    "@tensorflow-models/blazeface": "^0.1.0",
     "@tensorflow-models/hand-pose-detection": "^2.0.1",
     "@tensorflow/tfjs": "^4.22.0",
     "@vj/shared": "workspace:*",
-    "three": "^0.171.0",
-    "@tensorflow-models/blazeface": "^0.1.0"
+    "three": "^0.171.0"
   },
   "peerDependencies": {
     "react": "^19.0.0",

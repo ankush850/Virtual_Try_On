@@ -198,6 +198,8 @@ export class HandDetector implements ModelAdapter {
     let palmWidth = 0;
     if (indexMcp && pinkyMcp) {
       palmWidth = Math.hypot(pinkyMcp.x - indexMcp.x, pinkyMcp.y - indexMcp.y);
+      named['FINGER_WIDTH'] = { x: Math.max(12, palmWidth * 0.22), y: 0, name: 'FINGER_WIDTH' };
+      named['WRIST_WIDTH'] = { x: Math.max(25, palmWidth * 0.75), y: 0, name: 'WRIST_WIDTH' };
     }
 
     // ── Palm normal estimation ────────────────────────────────────────────

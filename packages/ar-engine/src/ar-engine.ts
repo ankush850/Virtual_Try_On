@@ -3,6 +3,7 @@ import { CameraEngine } from './camera/camera-engine.js';
 import type { CameraHealthStatus } from './camera/camera-engine.js';
 import { FaceDetector } from './detectors/face-detector.js';
 import { HandDetector } from './detectors/hand-detector.js';
+import { PoseDetector } from './detectors/pose-detector.js';
 import { AnchorRegistry } from './anchors/anchor-registry.js';
 import { LandmarkProcessor } from './landmarks/landmark-processor.js';
 import { PoseFitter } from './fitting/pose-fitter.js';
@@ -143,11 +144,9 @@ export class ArEngine {
       }
     });
 
-    // Detector
+    // Detector (lazy-loaded based on category)
     const registration = AnchorRegistry.get(config.jewelleryKind);
-    this.detector = registration.detector === 'hand'
-      ? new HandDetector()
-      : new FaceDetector();
+    this.detector = this._createDetector(registration.detector);
     await this.detector.load();
 
     // Tracking engine with status callback
@@ -198,18 +197,13 @@ export class ArEngine {
       fingerIndex: config.fingerIndex,
     });
 
-    // If kind changed, swap detector.
+    // If kind changed, swap detector (lazy load only what is needed).
     const registration = AnchorRegistry.get(config.jewelleryKind);
-    const needsNewDetector =
-      !this.detector ||
-      (registration.detector === 'hand'  && this.detector.name !== 'hand') ||
-      (registration.detector === 'face'  && this.detector.name !== 'face');
+    const needsNewDetector = !this.detector || this.detector.name !== registration.detector;
 
     if (needsNewDetector) {
       this.detector?.dispose();
-      this.detector = registration.detector === 'hand'
-        ? new HandDetector()
-        : new FaceDetector();
+      this.detector = this._createDetector(registration.detector);
       await this.detector.load();
       this.processor.reset();
       this.tracker.reset();
@@ -453,7 +447,9 @@ export class ArEngine {
           const named  = this.lastLandmarks.named;
           const keys = this.lastLandmarks.kind === 'face'
             ? FACE_LANDMARK_KEYS
-            : HAND_LANDMARK_KEYS;
+            : this.lastLandmarks.kind === 'pose'
+              ? ['LEFT_SHOULDER', 'RIGHT_SHOULDER', 'NECK_BASE', 'COLLARBONE']
+              : HAND_LANDMARK_KEYS;
           this.canvasRenderer.drawLandmarks(named, keys, 'dots');
         }
       }
@@ -619,11 +615,23 @@ export class ArEngine {
     }, delay);
   }
 
+  private _createDetector(detectorKind: 'face' | 'hand' | 'pose'): ModelAdapter {
+    switch (detectorKind) {
+      case 'pose':
+        return new PoseDetector();
+      case 'hand':
+        return new HandDetector();
+      case 'face':
+      default:
+        return new FaceDetector();
+    }
+  }
+
   private emit(events: ArEngineEvents): void {
     for (const listener of this.listeners) listener(events);
   }
 }
 
-export function detectorForKind(kind: JewelleryKind): 'face' | 'hand' {
+export function detectorForKind(kind: JewelleryKind): 'face' | 'hand' | 'pose' {
   return AnchorRegistry.get(kind).detector;
 }

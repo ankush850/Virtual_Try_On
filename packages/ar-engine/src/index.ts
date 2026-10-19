@@ -4,6 +4,7 @@ export { CameraEngine } from './camera/camera-engine.js';
 export type { CameraEngineOptions, CameraCapabilities, CameraHealthStatus } from './camera/camera-engine.js';
 export { FaceDetector } from './detectors/face-detector.js';
 export { HandDetector, FINGER_JOINTS } from './detectors/hand-detector.js';
+export { PoseDetector } from './detectors/pose-detector.js';
 export { LandmarkProcessor } from './landmarks/landmark-processor.js';
 export type { ProcessorOptions, ProcessorMetrics } from './landmarks/landmark-processor.js';
 export { AnchorRegistry } from './anchors/anchor-registry.js';
