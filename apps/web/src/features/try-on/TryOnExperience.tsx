@@ -82,6 +82,11 @@ export function TryOnExperience({ product: initialProduct, alternativeProducts }
 
   const [isOfflineMode, setIsOfflineMode] = useState(false);
 
+  const isDebugMode =
+    typeof window !== 'undefined' &&
+    (new URLSearchParams(window.location.search).get('debug') === '1' ||
+      new URLSearchParams(window.location.search).get('debug') === 'true');
+
   // If initialProduct changes externally (e.g. navigation)
   useEffect(() => {
     setCurrentProduct(initialProduct);
@@ -276,6 +281,7 @@ export function TryOnExperience({ product: initialProduct, alternativeProducts }
           ...config,
           mirroredPreview: mirrorOn,
           targetFps: 30,
+          debugLandmarks: isDebugMode,
         },
       );
       setRunning(true);
@@ -459,6 +465,11 @@ export function TryOnExperience({ product: initialProduct, alternativeProducts }
             <Badge variant="outline" className="border-primary/40 text-primary">
               Live Fitting
             </Badge>
+            {isDebugMode && (
+              <Badge variant="outline" className="border-amber-400 bg-amber-500/10 text-amber-300 font-mono text-[11px]">
+                DEBUG (?debug=1)
+              </Badge>
+            )}
             <span className="text-xs text-muted-foreground uppercase tracking-widest font-mono">
               Session: {sessionId ? sessionId.slice(0, 8) : 'Direct'}
             </span>

@@ -445,15 +445,15 @@ export class ArEngine {
           this.threeRenderer.render({ ...pose, visible: pose.visible && this.status !== 'LOST' });
         }
 
-        // Draw debug landmarks in raw coordinates (shared viewport handles visual flip).
-        if (this.debugLandmarks && this.lastLandmarks) {
-          const named  = this.lastLandmarks.named;
-          const keys = this.lastLandmarks.kind === 'face'
-            ? FACE_LANDMARK_KEYS
-            : this.lastLandmarks.kind === 'pose'
-              ? ['LEFT_SHOULDER', 'RIGHT_SHOULDER', 'NECK_BASE', 'COLLARBONE']
-              : HAND_LANDMARK_KEYS;
-          this.canvasRenderer.drawLandmarks(named, keys, 'dots');
+        // Draw debug overlay (?debug=1): landmarks, anchor point, measured widths, and live FPS HUD
+        if (this.debugLandmarks && this.canvasRenderer) {
+          this.canvasRenderer.drawDebugOverlay({
+            landmarks: this.lastLandmarks,
+            pose,
+            fps: Math.round(this.fpsMeter.getFps()),
+            latencyMs: performance.now() - t0,
+            status: this.status,
+          });
         }
       }
     } catch (err) {
