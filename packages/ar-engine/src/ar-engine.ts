@@ -15,6 +15,8 @@ import { Canvas2dRenderer } from './renderers/canvas2d-renderer.js';
 import { ThreeRenderer } from './renderers/three-renderer.js';
 import { CaptureCompositor } from './capture/capture-compositor.js';
 import { LightingEstimator } from './imaging/lighting-estimator.js';
+import { BodyModelEstimator } from './landmarks/body-model-estimator.js';
+import type { BodyModelMeasurements } from './landmarks/body-model-estimator.js';
 import { initTfBackend } from './models/tf-backend.js';
 import type { ModelAdapter } from './models/model-adapter.js';
 import { isFaceCentered } from './tracking/face-guide-state.js';
@@ -91,6 +93,11 @@ export class ArEngine {
 
   private lastPose:      PoseFit       | null = null;
   private lastLandmarks: LandmarkResult | null = null;
+  private lastLuma:      number | null = null;
+
+  private readonly bodyModel = new BodyModelEstimator();
+  private fineTuneScale = 1.0;
+  private fineTuneOffsetY = 0;
 
   private status: TrackingStatus = 'INITIALIZING';
   private listeners = new Set<Listener>();
@@ -166,6 +173,7 @@ export class ArEngine {
       rotationZ:   ((config.defaultRotationZ ?? 0) * Math.PI) / 180,
       fingerIndex: config.fingerIndex,
     });
+    this.fitter.setFineTune(this.fineTuneScale, this.fineTuneOffsetY);
 
     // Renderers
     const ctx = host.overlayCanvas.getContext('2d');
@@ -199,6 +207,7 @@ export class ArEngine {
       rotationZ:   ((config.defaultRotationZ ?? 0) * Math.PI) / 180,
       fingerIndex: config.fingerIndex,
     });
+    this.fitter.setFineTune(this.fineTuneScale, this.fineTuneOffsetY);
 
     // If kind changed, swap detector (lazy load only what is needed).
     const registration = AnchorRegistry.get(config.jewelleryKind);
@@ -275,6 +284,18 @@ export class ArEngine {
 
   static listCameraCapabilities() {
     return CameraEngine.listCapabilities();
+  }
+
+  // ─── Universal Fit & Fine-Tuning ──────────────────────────────────────────
+
+  setFineTune(scaleMultiplier = 1.0, offsetY = 0): void {
+    this.fineTuneScale = scaleMultiplier;
+    this.fineTuneOffsetY = offsetY;
+    this.fitter?.setFineTune(scaleMultiplier, offsetY);
+  }
+
+  getBodyModel(): BodyModelMeasurements {
+    return this.bodyModel.getMeasurements();
   }
 
   // ─── Capture ───────────────────────────────────────────────────────────────
@@ -398,7 +419,7 @@ export class ArEngine {
         // Skip render if adaptive controller says we're under budget.
         const skipRender = this.adaptive.shouldSkipRender();
 
-        if (this.frameIndex % 8 === 0 && this.threeRenderer) {
+        if (this.frameIndex % 8 === 0) {
           const size = this.lastPose?.scale ? this.lastPose.scale * 4 : video.videoWidth * 0.35;
           const sampleX = this.lastPose ? this.lastPose.position.x : video.videoWidth / 2;
           const luma = this.lighting.estimate(video, {
@@ -406,7 +427,10 @@ export class ArEngine {
             y: this.lastPose?.position.y ?? video.videoHeight / 2,
             size,
           });
-          this.threeRenderer.setExposure(luma);
+          this.lastLuma = luma;
+          if (this.threeRenderer) {
+            this.threeRenderer.setExposure(luma);
+          }
         }
 
         if (this.adaptive.shouldDetect(this.frameIndex)) {
@@ -472,11 +496,38 @@ export class ArEngine {
     let promptMessage: string | undefined;
     let shouldersVisible: boolean | undefined;
 
+    // Hint 1: Low light warning
+    if (this.lastLuma != null && this.lastLuma < 0.20 && this.status === 'TRACKING') {
+      promptMessage = 'Please increase lighting';
+    }
+
+    // Hint 2: Shoulder visibility for necklace fitting
     if (this.lastLandmarks?.kind === 'pose') {
       shouldersVisible = this.lastLandmarks.shouldersVisible !== false;
       if (!shouldersVisible && this.config?.jewelleryKind === 'NECKLACE') {
         promptMessage = 'Move back so your shoulders are visible';
       }
+    }
+
+    // Hint 3: Hand truncation warning for rings and bangles
+    if (this.lastLandmarks?.kind === 'hand') {
+      const wrist = this.lastLandmarks.named['WRIST'];
+      const videoW = this.host?.video.videoWidth || 640;
+      const videoH = this.host?.video.videoHeight || 480;
+      if (
+        wrist &&
+        (wrist.x < videoW * 0.05 ||
+          wrist.x > videoW * 0.95 ||
+          wrist.y < videoH * 0.05 ||
+          wrist.y > videoH * 0.95)
+      ) {
+        promptMessage = 'Show your full hand';
+      }
+    }
+
+    // Universal Fit: update biometric body proportions every frame
+    if (this.lastLandmarks) {
+      this.bodyModel.estimate(this.lastLandmarks);
     }
 
     let faceCentered = false;

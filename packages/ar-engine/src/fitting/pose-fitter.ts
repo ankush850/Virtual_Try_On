@@ -47,6 +47,10 @@ export class PoseFitter {
   private readonly springStiffness = 0.35;
   private readonly springDamping   = 0.72;
 
+  // Session fine-tune adjustments for edge cases (hair, collar, body variation)
+  private fineTuneScaleMul = 1.0;
+  private fineTuneOffsetY  = 0;
+
   constructor(
     private readonly profile: AnchorProfile,
     private readonly defaults: PoseFitterOptions,
@@ -54,6 +58,11 @@ export class PoseFitter {
     this.positionAlpha = defaults.positionAlpha ?? 0.40;
     this.rotationAlpha = defaults.rotationAlpha ?? 0.25;
     this.scaleAlpha    = defaults.scaleAlpha    ?? 0.22;
+  }
+
+  setFineTune(scaleMultiplier = 1.0, offsetY = 0): void {
+    this.fineTuneScaleMul = Math.max(0.5, Math.min(2.0, scaleMultiplier));
+    this.fineTuneOffsetY  = offsetY;
   }
 
   fit(landmarks: LandmarkResult | null): PoseFit {
@@ -136,11 +145,11 @@ export class PoseFitter {
 
     const minS = this.profile.minScale ?? 0.2;
     const maxS = this.profile.maxScale ?? 3;
-    targetScale = Math.min(maxS, Math.max(minS, targetScale));
+    targetScale = Math.min(maxS, Math.max(minS, targetScale * this.fineTuneScaleMul));
 
     // ── Offset ────────────────────────────────────────────────────────────
     const ox = (this.profile.offset?.x ?? 0) * liveScale;
-    const oy = (this.profile.offset?.y ?? 0) * liveScale;
+    const oy = (this.profile.offset?.y ?? 0) * liveScale + this.fineTuneOffsetY;
 
     // ── Rotation ──────────────────────────────────────────────────────────
     let targetRotation = this.defaults.rotationZ;

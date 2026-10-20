@@ -14,6 +14,8 @@ import {
   Maximize2,
   Minimize2,
   WifiOff,
+  Sliders,
+  RotateCcw,
 } from 'lucide-react';
 import {
   Button,
@@ -81,6 +83,20 @@ export function TryOnExperience({ product: initialProduct, alternativeProducts }
   } = useTryOnStore();
 
   const [isOfflineMode, setIsOfflineMode] = useState(false);
+  const [fineTuneScale, setFineTuneScale] = useState(1.0);
+  const [fineTuneY, setFineTuneY] = useState(0);
+
+  const handleFineTuneChange = (scale: number, y: number) => {
+    setFineTuneScale(scale);
+    setFineTuneY(y);
+    engineRef.current?.setFineTune(scale, y);
+  };
+
+  const handleResetFineTune = () => {
+    setFineTuneScale(1.0);
+    setFineTuneY(0);
+    engineRef.current?.setFineTune(1.0, 0);
+  };
 
   const isDebugMode =
     typeof window !== 'undefined' &&
@@ -590,6 +606,58 @@ export function TryOnExperience({ product: initialProduct, alternativeProducts }
                 <Button variant="outline" size="icon" className="rounded-full shrink-0">
                   <Heart className="h-4 w-4" />
                 </Button>
+              </div>
+            </div>
+
+            {/* Atelier Fit Fine-Tuning (Universal Fit Session Controls) */}
+            <div className="rounded-3xl border bg-card p-5 shadow-sm space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sliders className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-medium">Fine-Tune Fit</span>
+                </div>
+                {(fineTuneScale !== 1.0 || fineTuneY !== 0) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleResetFineTune}
+                    className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    <RotateCcw className="h-3 w-3 mr-1" /> Reset
+                  </Button>
+                )}
+              </div>
+              <div className="space-y-3 text-xs">
+                <div>
+                  <div className="flex justify-between text-muted-foreground mb-1">
+                    <span>Size Ratio</span>
+                    <span className="font-mono text-[11px] text-foreground">{Math.round(fineTuneScale * 100)}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.80"
+                    max="1.20"
+                    step="0.02"
+                    value={fineTuneScale}
+                    onChange={(e) => handleFineTuneChange(parseFloat(e.target.value), fineTuneY)}
+                    className="w-full accent-primary cursor-pointer"
+                  />
+                </div>
+                <div>
+                  <div className="flex justify-between text-muted-foreground mb-1">
+                    <span>Vertical Position</span>
+                    <span className="font-mono text-[11px] text-foreground">{fineTuneY > 0 ? `+${fineTuneY}` : fineTuneY} px</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="-25"
+                    max="25"
+                    step="1"
+                    value={fineTuneY}
+                    onChange={(e) => handleFineTuneChange(fineTuneScale, parseInt(e.target.value, 10))}
+                    className="w-full accent-primary cursor-pointer"
+                  />
+                </div>
               </div>
             </div>
 

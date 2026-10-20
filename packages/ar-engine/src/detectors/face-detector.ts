@@ -51,7 +51,7 @@ export class FaceDetector implements ModelAdapter {
           delegate: 'GPU',
         },
         runningMode: 'VIDEO',
-        numFaces: 1,
+        numFaces: 4,
         outputFacialTransformationMatrixes: true,
       });
     } catch {
@@ -79,9 +79,27 @@ export class FaceDetector implements ModelAdapter {
       try {
         const timestamp = performance.now();
         const res = this.faceLandmarker.detectForVideo(input, timestamp);
-        if (res?.faceLandmarks && res.faceLandmarks.length > 0 && res.faceLandmarks[0].length >= 468) {
-          const matrix = res.facialTransformationMatrixes?.[0]?.data;
-          return this._processMediaPipeMesh(res.faceLandmarks[0], width, height, matrix);
+        if (res?.faceLandmarks && res.faceLandmarks.length > 0) {
+          // Multiple faces: track only the largest face
+          let bestIdx = 0;
+          let maxArea = 0;
+          for (let f = 0; f < res.faceLandmarks.length; f++) {
+            const mesh = res.faceLandmarks[f];
+            if (!mesh || mesh.length < 468) continue;
+            const top = mesh[10];
+            const bottom = mesh[152];
+            const left = mesh[234];
+            const right = mesh[454];
+            const area = Math.abs((right.x - left.x) * (bottom.y - top.y));
+            if (area > maxArea) {
+              maxArea = area;
+              bestIdx = f;
+            }
+          }
+          if (res.faceLandmarks[bestIdx]?.length >= 468) {
+            const matrix = res.facialTransformationMatrixes?.[bestIdx]?.data;
+            return this._processMediaPipeMesh(res.faceLandmarks[bestIdx], width, height, matrix);
+          }
         }
       } catch {
         // Fall back to BlazeFace on inference issue
@@ -178,11 +196,11 @@ export class FaceDetector implements ModelAdapter {
 
     if (matrix && matrix.length >= 16) {
       // Direct 3D angles from MediaPipe outputFacialTransformationMatrixes (4x4 column-major)
-      const m02 = matrix[8];
-      const m10 = matrix[1];
-      const m11 = matrix[5];
-      const m12 = matrix[9];
-      const m22 = matrix[10];
+      const m02 = Number(matrix[8] ?? 0);
+      const m10 = Number(matrix[1] ?? 0);
+      const m11 = Number(matrix[5] ?? 1);
+      const m12 = Number(matrix[9] ?? 0);
+      const m22 = Number(matrix[10] ?? 1);
 
       pitch = Math.asin(Math.max(-1, Math.min(1, -m12)));
       yaw = Math.atan2(m02, m22);
@@ -244,7 +262,19 @@ export class FaceDetector implements ModelAdapter {
       return null;
     }
 
-    const face = preds[0];
+    let face = preds[0];
+    if (preds.length > 1) {
+      let maxArea = 0;
+      for (const p of preds) {
+        const tl = p.topLeft as [number, number];
+        const br = p.bottomRight as [number, number];
+        const area = Math.abs((br[0] - tl[0]) * (br[1] - tl[1]));
+        if (area > maxArea) {
+          maxArea = area;
+          face = p;
+        }
+      }
+    }
     if (!face) {
       this.prevConfidence = Math.max(0, this.prevConfidence - 0.15);
       return null;

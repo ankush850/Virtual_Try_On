@@ -7,6 +7,8 @@ export { HandDetector, FINGER_JOINTS } from './detectors/hand-detector.js';
 export { PoseDetector } from './detectors/pose-detector.js';
 export { LandmarkProcessor } from './landmarks/landmark-processor.js';
 export type { ProcessorOptions, ProcessorMetrics } from './landmarks/landmark-processor.js';
+export { BodyModelEstimator } from './landmarks/body-model-estimator.js';
+export type { BodyModelMeasurements } from './landmarks/body-model-estimator.js';
 export { AnchorRegistry } from './anchors/anchor-registry.js';
 export type { AnchorRegistration, DetectorKind } from './anchors/anchor-registry.js';
 export { PoseFitter } from './fitting/pose-fitter.js';
