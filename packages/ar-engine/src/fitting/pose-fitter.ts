@@ -242,6 +242,9 @@ export class PoseFitter {
       this.smoothSecPos = null;
     }
 
+    const yaw = landmarks.named['HEAD_YAW']?.x;
+    const pitch = landmarks.named['HEAD_ROLL']?.y;
+
     return {
       position:          { x: this.smoothPos!.x, y: this.smoothPos!.y },
       secondaryPosition: this.smoothSecPos
@@ -252,6 +255,8 @@ export class PoseFitter {
       confidence:        landmarks.confidence * this.visibilityAlpha,
       visible:           true,
       depthHint,
+      yaw,
+      pitch,
     };
   }
 

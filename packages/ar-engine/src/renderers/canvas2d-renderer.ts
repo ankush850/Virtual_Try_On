@@ -146,8 +146,30 @@ export class Canvas2dRenderer {
       }
     }
 
+    let alpha = this.currentOpacity * (pose.confidence > 0 ? Math.min(1, pose.confidence + 0.3) : 1);
+
+    // FIX 7: When head yaw exceeds ~35 degrees (0.61 rad), fade out earring on the far side
+    const isEarring = kind === 'EARRINGS' || this.currentUrl.includes('earring');
+    if (isEarring && pose.secondaryPosition && pose.yaw !== undefined) {
+      const FAR_YAW_THRESHOLD = 0.61; // ~35 deg
+      const FAR_YAW_MAX = 0.85;       // ~48.7 deg
+      const absYaw = Math.abs(pose.yaw);
+      if (absYaw > FAR_YAW_THRESHOLD) {
+        const fade = Math.max(0, 1 - (absYaw - FAR_YAW_THRESHOLD) / (FAR_YAW_MAX - FAR_YAW_THRESHOLD));
+        const otherPos = secondary ? pose.position : pose.secondaryPosition;
+        // In image coordinates, yaw > 0 is facing right -> left side (smaller X) is occluded
+        // yaw < 0 is facing left -> right side (larger X) is occluded
+        const isFarSide = pose.yaw > 0 ? pos.x < otherPos.x : pos.x > otherPos.x;
+        if (isFarSide) {
+          alpha *= fade;
+        }
+      }
+    }
+
+    if (alpha < 0.01) return;
+
     this.ctx.save();
-    this.ctx.globalAlpha = this.currentOpacity * (pose.confidence > 0 ? Math.min(1, pose.confidence + 0.3) : 1);
+    this.ctx.globalAlpha = alpha;
     this.ctx.translate(pos.x, pos.y);
     this.ctx.rotate(pose.rotationZ);
     if (secondary && this.mirrorSecondary) {

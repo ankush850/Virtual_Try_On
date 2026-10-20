@@ -52,6 +52,7 @@ export class FaceDetector implements ModelAdapter {
         },
         runningMode: 'VIDEO',
         numFaces: 1,
+        outputFacialTransformationMatrixes: true,
       });
     } catch {
       // Graceful fallback to BlazeFace
@@ -79,7 +80,8 @@ export class FaceDetector implements ModelAdapter {
         const timestamp = performance.now();
         const res = this.faceLandmarker.detectForVideo(input, timestamp);
         if (res?.faceLandmarks && res.faceLandmarks.length > 0 && res.faceLandmarks[0].length >= 468) {
-          return this._processMediaPipeMesh(res.faceLandmarks[0], width, height);
+          const matrix = res.facialTransformationMatrixes?.[0]?.data;
+          return this._processMediaPipeMesh(res.faceLandmarks[0], width, height, matrix);
         }
       } catch {
         // Fall back to BlazeFace on inference issue
@@ -115,6 +117,7 @@ export class FaceDetector implements ModelAdapter {
     mesh: Array<{ x: number; y: number; z?: number }>,
     width: number,
     height: number,
+    matrix?: Float32Array | number[],
   ): LandmarkResult {
     this.frameCount++;
 
@@ -163,31 +166,45 @@ export class FaceDetector implements ModelAdapter {
     addIdx('FOREHEAD_CENTER', 10);
     addIdx('MAANG_TIKKA', 10);
 
-    // Head orientation angles
     const leftEye = named['LEFT_EYE'];
     const rightEye = named['RIGHT_EYE'];
     const noseTip = named['NOSE_TIP'];
     const chin = named['CHIN'];
 
+    // Head orientation angles
     let roll = 0;
-    if (leftEye && rightEye) {
-      roll = Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x);
-    }
     let pitch = 0;
-    if (noseTip && chin && leftEye) {
-      const midEyeY = (leftEye.y + (rightEye?.y ?? leftEye.y)) / 2;
-      const noseRatio = (noseTip.y - midEyeY) / Math.max(1, chin.y - midEyeY);
-      pitch = Math.max(-1, Math.min(1, (noseRatio - 0.45) * 4));
-    }
     let yaw = 0;
-    if (noseTip && named['LEFT_EAR_LOBE'] && named['RIGHT_EAR_LOBE']) {
-      const earMidX = (named['LEFT_EAR_LOBE'].x + named['RIGHT_EAR_LOBE'].x) / 2;
-      const earDist = Math.abs(named['LEFT_EAR_LOBE'].x - named['RIGHT_EAR_LOBE'].x);
-      yaw = earDist > 0 ? (noseTip.x - earMidX) / (earDist * 0.5) : 0;
+
+    if (matrix && matrix.length >= 16) {
+      // Direct 3D angles from MediaPipe outputFacialTransformationMatrixes (4x4 column-major)
+      const m02 = matrix[8];
+      const m10 = matrix[1];
+      const m11 = matrix[5];
+      const m12 = matrix[9];
+      const m22 = matrix[10];
+
+      pitch = Math.asin(Math.max(-1, Math.min(1, -m12)));
+      yaw = Math.atan2(m02, m22);
+      roll = Math.atan2(m10, m11);
+    } else {
+      if (leftEye && rightEye) {
+        roll = Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x);
+      }
+      if (noseTip && chin && leftEye) {
+        const midEyeY = (leftEye.y + (rightEye?.y ?? leftEye.y)) / 2;
+        const noseRatio = (noseTip.y - midEyeY) / Math.max(1, chin.y - midEyeY);
+        pitch = Math.max(-1, Math.min(1, (noseRatio - 0.45) * 4));
+      }
+      if (noseTip && named['LEFT_EAR_LOBE'] && named['RIGHT_EAR_LOBE']) {
+        const earMidX = (named['LEFT_EAR_LOBE'].x + named['RIGHT_EAR_LOBE'].x) / 2;
+        const earDist = Math.abs(named['LEFT_EAR_LOBE'].x - named['RIGHT_EAR_LOBE'].x);
+        yaw = earDist > 0 ? (noseTip.x - earMidX) / (earDist * 0.5) : 0;
+      }
     }
 
     named['HEAD_ROLL'] = { x: roll, y: pitch, name: 'HEAD_ROLL' };
-    named['HEAD_YAW'] = { x: yaw, y: 0, name: 'HEAD_YAW' };
+    named['HEAD_YAW'] = { x: yaw, y: pitch, name: 'HEAD_YAW' };
 
     // Scale reference: IPD (interpupillary distance) or Face Width
     let scaleRef = 120;
